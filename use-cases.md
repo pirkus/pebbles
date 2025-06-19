@@ -426,7 +426,7 @@ graph LR
     K[Monitoring Tool] --> L[GET /progress?filename=data.csv<br/>Specific file status]
     L --> M[Real-time Progress Display]
     
-    N[Report Generator] --> O[GET /progress?email=user@company.com<br/>User's file history]
+    N[Report Generator] --> O[GET /progress?email="user@company.com"<br/>User's file history]
     O --> P[Generate User Report]
 ```
 
