@@ -1,7 +1,6 @@
 (ns pebbles.db
   (:require
-   [monger.collection :as mc]
-   [monger.operators :refer :all]))
+   [monger.collection :as mc]))
 
 (defn find-progress
   "Find progress document by filename and email"

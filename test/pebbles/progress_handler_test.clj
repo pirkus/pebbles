@@ -3,8 +3,7 @@
    [clojure.test :refer [deftest is testing use-fixtures]]
    [pebbles.system :as system]
    [pebbles.test-utils :as test-utils]
-   [pebbles.db :as db]
-   [monger.collection :as mc]))
+   [pebbles.db :as db]))
 
 (def test-db (atom nil))
 

@@ -3,8 +3,7 @@
    [clojure.test :refer [deftest is testing use-fixtures]]
    [pebbles.db :as db]
    [pebbles.test-utils :as test-utils]
-   [monger.collection :as mc]
-   [monger.operators :refer :all]))
+   [monger.collection :as mc]))
 
 (def test-db (atom nil))
 
@@ -89,7 +88,7 @@
                        :counts {:done 10 :warn 0 :failed 0}
                        :isCompleted false})
           ;; Update it
-          update-doc {$set {:counts {:done 20 :warn 1 :failed 0}
+          update-doc {"$set" {:counts {:done 20 :warn 1 :failed 0}
                            :isCompleted true}}]
       
       (db/update-progress @test-db filename email update-doc)

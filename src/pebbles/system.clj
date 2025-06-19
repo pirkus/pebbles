@@ -10,12 +10,10 @@
    [io.pedestal.interceptor.error :as err]
    [monger.collection :as mc]
    [monger.core :as mg]
-   [monger.operators :refer :all]
    [pebbles.db :as db]
    [pebbles.http-resp :as http-resp]
    [pebbles.jwt :as jwt]
-   [pebbles.specs :as specs]
-   [ring.util.response :as response]))
+   [pebbles.specs :as specs]))
 
 (def exception-handler
   (err/error-dispatch [context ex]
@@ -110,7 +108,7 @@
                 new-progress (cond-> new-progress
                               errors (assoc :errors errors)
                               warnings (assoc :warnings warnings))
-                result (db/create-progress db new-progress)]
+                _ (db/create-progress db new-progress)]
             (http-resp/ok {:result "created" 
                           :filename filename
                           :counts counts
@@ -128,14 +126,14 @@
                 ;; Append new errors and warnings to existing ones
                 all-errors (concat (or (:errors existing) []) (or errors []))
                 all-warnings (concat (or (:warnings existing) []) (or warnings []))
-                update-doc {$set {:counts new-counts
+                update-doc {"$set" {:counts new-counts
                                  :updatedAt now
                                  :isCompleted (boolean isLast)
                                  :errors all-errors
                                  :warnings all-warnings}}
                 ;; Add total if provided and not already set
                 update-doc (if (and total (nil? (:total existing)))
-                            (assoc-in update-doc [$set :total] total)
+                            (assoc-in update-doc ["$set" :total] total)
                             update-doc)]
             
             (db/update-progress db filename email update-doc)
