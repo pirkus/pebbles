@@ -3,17 +3,18 @@
    [clojure.test :refer [deftest is testing use-fixtures]]
    [pebbles.db :as db]
    [pebbles.test-utils :as test-utils]
-   [monger.collection :as mc]))
+   [monger.collection :as mc]
+   [monger.operators :refer :all]))
 
 (def test-db (atom nil))
 
 (defn db-fixture [f]
-  (let [db (test-utils/fresh-db)]
-    (reset! test-db db)
+  (let [db-map (test-utils/fresh-db)]
+    (reset! test-db (:db db-map))
     (try
       (f)
       (finally
-        (test-utils/cleanup-db db)))))
+        (test-utils/cleanup-db db-map)))))
 
 (use-fixtures :each db-fixture)
 
@@ -121,3 +122,22 @@
   (testing "Find progress for user with no records"
     (let [results (db/find-all-progress @test-db "nobody@example.com")]
       (is (empty? results)))))
+
+(deftest find-progress-by-filename-test
+  (testing "Find progress by filename only"
+    (let [email "creator@example.com"
+          filename "test-file.csv"]
+      ;; Insert test data
+      (mc/insert @test-db "progress" 
+                {:filename filename :email email :counts {:done 15 :warn 1 :failed 0}})
+      
+      ;; Find by filename only
+      (let [result (db/find-progress-by-filename @test-db filename)]
+        (is (not (nil? result)))
+        (is (= filename (:filename result)))
+        (is (= email (:email result)))
+        (is (= {:done 15 :warn 1 :failed 0} (:counts result))))))
+  
+  (testing "Find non-existent file returns nil"
+    (let [result (db/find-progress-by-filename @test-db "non-existent.csv")]
+      (is (nil? result)))))
