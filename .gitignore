@@ -1,0 +1,21 @@
+# Clojure
+.cpcache/
+.nrepl-port
+.lein-failures
+.lein-repl-history
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test reports
+target/
+test-results/

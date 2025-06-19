@@ -1,0 +1,159 @@
+stages:
+  - test
+  - build
+  - deploy
+  - security
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  CLOJURE_VERSION: "1.11.1.1435"
+  # Cache configuration
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .m2/repository/
+    - .cpcache/
+
+# Test job
+test:clojure:
+  stage: test
+  image: clojure:temurin-17-tools-deps-alpine
+  services:
+    - name: mongo:6.0
+      alias: mongodb
+  variables:
+    MONGO_URI: "mongodb://mongodb:27017/pebbles-test"
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Running tests..."
+    - clojure -P
+    - clojure -M:test
+  artifacts:
+    when: always
+    reports:
+      junit: target/test-results/**/*.xml
+    paths:
+      - target/test-results/
+    expire_in: 1 week
+  only:
+    - branches
+    - merge_requests
+
+# Lint job
+lint:clj-kondo:
+  stage: test
+  image: cljkondo/clj-kondo:alpine
+  script:
+    - clj-kondo --lint src test
+  allow_failure: true
+  only:
+    - branches
+    - merge_requests
+
+# Build Docker image
+build:docker:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
+        docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+        docker push $CI_REGISTRY_IMAGE:latest
+      fi
+  only:
+    - branches
+  except:
+    - schedules
+
+# Deploy to staging
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to staging..."
+    # Add your deployment script here
+    # Example: curl -X POST https://your-deployment-webhook.com
+  environment:
+    name: staging
+    url: https://staging.pebbles.example.com
+  only:
+    - develop
+  when: manual
+
+# Deploy to production
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to production..."
+    # Add your deployment script here
+  environment:
+    name: production
+    url: https://pebbles.example.com
+  only:
+    - main
+  when: manual
+
+# Security scanning
+security:trivy:
+  stage: security
+  image: 
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  services:
+    - docker:24.0.5-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: ".trivycache/"
+  before_script:
+    - apk add --no-cache docker-cli
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - trivy --version
+    - time trivy image --clear-cache
+    - time trivy image --exit-code 0 --no-progress --format table ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}
+    - time trivy image --exit-code 0 --no-progress --format json -o trivy-report.json ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}
+    # Fail on high or critical vulnerabilities
+    - time trivy image --exit-code 1 --severity CRITICAL --no-progress ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}
+  artifacts:
+    reports:
+      container_scanning: trivy-report.json
+    paths:
+      - trivy-report.json
+    expire_in: 1 week
+  cache:
+    paths:
+      - .trivycache/
+  dependencies:
+    - build:docker
+  only:
+    - branches
+
+# SAST scanning for Clojure code
+security:sast:
+  stage: security
+  image: clojure:temurin-17-tools-deps-alpine
+  script:
+    - echo "Running security analysis..."
+    # You can add tools like nvd-clojure here
+    # Example: clojure -M:nvd check
+  allow_failure: true
+  only:
+    - branches

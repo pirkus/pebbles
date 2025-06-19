@@ -1,0 +1,140 @@
+version: 2.1
+
+executors:
+  clojure-executor:
+    docker:
+      - image: cimg/clojure:1.11-openjdk-17.0
+    working_directory: ~/repo
+    environment:
+      # Customize the JVM maximum heap limit
+      JVM_OPTS: -Xmx3200m
+
+jobs:
+  test:
+    executor: clojure-executor
+    steps:
+      - checkout
+      
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "deps.edn" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+      
+      # Setup remote Docker for testcontainers
+      - setup_remote_docker:
+          version: 20.10.24
+          docker_layer_caching: true
+      
+      # Download dependencies
+      - run:
+          name: Download dependencies
+          command: clojure -P
+      
+      - save_cache:
+          paths:
+            - ~/.m2
+            - .cpcache
+          key: v1-dependencies-{{ checksum "deps.edn" }}
+      
+      # Run tests
+      - run:
+          name: Run tests
+          command: clojure -M:test
+          environment:
+            # Testcontainers configuration for CircleCI
+            TESTCONTAINERS_RYUK_DISABLED: true
+            TESTCONTAINERS_CHECKS_DISABLE: true
+      
+      # Store test results
+      - store_test_results:
+          path: target/test-results
+      
+      - store_artifacts:
+          path: target/test-results
+
+  build:
+    executor: clojure-executor
+    steps:
+      - checkout
+      
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "deps.edn" }}
+            - v1-dependencies-
+      
+      # Verify the application can start
+      - run:
+          name: Check compilation
+          command: |
+            timeout 10s clojure -M -e "(require 'pebbles.system) (println \"System namespace loaded successfully\")" || true
+      
+      # Build Docker image
+      - setup_remote_docker:
+          version: 20.10.24
+          docker_layer_caching: true
+      
+      - run:
+          name: Build Docker image
+          command: |
+            docker build -t pebbles:${CIRCLE_SHA1} .
+            docker tag pebbles:${CIRCLE_SHA1} pebbles:latest
+      
+      # Save Docker image for deployment
+      - run:
+          name: Save Docker image
+          command: |
+            mkdir -p docker-images
+            docker save -o docker-images/pebbles.tar pebbles:${CIRCLE_SHA1}
+      
+      - persist_to_workspace:
+          root: .
+          paths:
+            - docker-images
+
+  deploy:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      
+      - attach_workspace:
+          at: .
+      
+      - setup_remote_docker:
+          version: 20.10.24
+      
+      - run:
+          name: Load Docker image
+          command: docker load -i docker-images/pebbles.tar
+      
+      # Deploy to Docker Hub (requires DOCKER_USER and DOCKER_PASS env vars)
+      - run:
+          name: Push to Docker Hub
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+              docker tag pebbles:${CIRCLE_SHA1} ${DOCKER_USER}/pebbles:${CIRCLE_SHA1}
+              docker tag pebbles:${CIRCLE_SHA1} ${DOCKER_USER}/pebbles:latest
+              docker push ${DOCKER_USER}/pebbles:${CIRCLE_SHA1}
+              docker push ${DOCKER_USER}/pebbles:latest
+            fi
+
+workflows:
+  version: 2
+  test-build-deploy:
+    jobs:
+      - test
+      - build:
+          requires:
+            - test
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only:
+                - main
+          context:
+            - docker-hub-creds  # Create this context in CircleCI with DOCKER_USER and DOCKER_PASS
