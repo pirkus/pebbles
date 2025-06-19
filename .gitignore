@@ -3,11 +3,13 @@
 .nrepl-port
 .lein-failures
 .lein-repl-history
+.clj-kondo
 
 # IDE
 .idea/
 *.iml
 .vscode/
+.lsp
 
 # OS
 .DS_Store
