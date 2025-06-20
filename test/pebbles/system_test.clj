@@ -3,7 +3,9 @@
    [clojure.test :refer [deftest is testing]]
    [pebbles.system :as system]
    [pebbles.specs :as specs]
-   [clojure.spec.alpha :as s]))
+   [clojure.spec.alpha :as s])
+  (:import
+   [pebbles.system MongoComponent HttpComponent]))
 
 (deftest health-handler-test
   (testing "Health endpoint returns OK"
@@ -35,8 +37,8 @@
     (let [sys (system/system)]
       (is (contains? sys :mongo))
       (is (contains? sys :http))
-      (is (instance? system/MongoComponent (:mongo sys)))
-      (is (instance? system/HttpComponent (:http sys))))))
+      (is (instance? MongoComponent (:mongo sys)))
+      (is (instance? HttpComponent (:http sys))))))
 
 (deftest route-expansion-test
   (testing "Routes can be expanded without errors"

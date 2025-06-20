@@ -1,8 +1,7 @@
 (ns pebbles.test-utils
   (:require
    [cheshire.core :as json]
-   [monger.core :as mg]
-   [org.testcontainers.containers :as tc])
+   [monger.core :as mg])
   (:import
    (org.testcontainers.containers MongoDBContainer)
    (org.testcontainers.utility DockerImageName)))
@@ -20,11 +19,11 @@
   (let [container (start-mongodb-container)
         uri (get-connection-string container)
         {:keys [conn db]} (mg/connect-via-uri uri)]
-    ;; Return db with container reference for cleanup
-    (with-meta db {:container container :conn conn})))
+    ;; Return a map with db and container reference for cleanup
+    {:db db :container container :conn conn}))
 
-(defn cleanup-db [db]
-  (let [{:keys [container conn]} (meta db)]
+(defn cleanup-db [db-map]
+  (let [{:keys [container conn]} db-map]
     (when conn (mg/disconnect conn))
     (when container (.stop container))))
 

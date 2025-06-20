@@ -8,12 +8,12 @@
 (def test-db (atom nil))
 
 (defn db-fixture [f]
-  (let [db (test-utils/fresh-db)]
-    (reset! test-db db)
+  (let [db-map (test-utils/fresh-db)]
+    (reset! test-db (:db db-map))
     (try
       (f)
       (finally
-        (test-utils/cleanup-db db)))))
+        (test-utils/cleanup-db db-map)))))
 
 (use-fixtures :each db-fixture)
 
@@ -88,7 +88,7 @@
                        :counts {:done 10 :warn 0 :failed 0}
                        :isCompleted false})
           ;; Update it
-          update-doc {$set {:counts {:done 20 :warn 1 :failed 0}
+          update-doc {"$set" {:counts {:done 20 :warn 1 :failed 0}
                            :isCompleted true}}]
       
       (db/update-progress @test-db filename email update-doc)
@@ -121,3 +121,22 @@
   (testing "Find progress for user with no records"
     (let [results (db/find-all-progress @test-db "nobody@example.com")]
       (is (empty? results)))))
+
+(deftest find-progress-by-filename-test
+  (testing "Find progress by filename only"
+    (let [email "creator@example.com"
+          filename "test-file.csv"]
+      ;; Insert test data
+      (mc/insert @test-db "progress" 
+                {:filename filename :email email :counts {:done 15 :warn 1 :failed 0}})
+      
+      ;; Find by filename only
+      (let [result (db/find-progress-by-filename @test-db filename)]
+        (is (not (nil? result)))
+        (is (= filename (:filename result)))
+        (is (= email (:email result)))
+        (is (= {:done 15 :warn 1 :failed 0} (:counts result))))))
+  
+  (testing "Find non-existent file returns nil"
+    (let [result (db/find-progress-by-filename @test-db "non-existent.csv")]
+      (is (nil? result)))))

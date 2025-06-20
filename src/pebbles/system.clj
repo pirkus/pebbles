@@ -10,12 +10,10 @@
    [io.pedestal.interceptor.error :as err]
    [monger.collection :as mc]
    [monger.core :as mg]
-   [monger.operators :refer :all]
    [pebbles.db :as db]
    [pebbles.http-resp :as http-resp]
    [pebbles.jwt :as jwt]
-   [pebbles.specs :as specs]
-   [ring.util.response :as response]))
+   [pebbles.specs :as specs]))
 
 (def exception-handler
   (err/error-dispatch [context ex]
@@ -74,18 +72,24 @@
 (defn update-progress-handler [db]
   (fn [request]
     (try
-      (let [email (get-in request [:identity :email])
+              (let [email (get-in request [:identity :email])
             {:keys [filename counts total isLast errors warnings]} (:json-params request)
             {:keys [done warn failed]} counts
             now (.toString (java.time.Instant/now))
             
-            ;; Find existing progress
+            ;; Find existing progress for authorization check
+            any-existing (db/find-progress-by-filename db filename)
+            ;; Find existing progress for the current user
             existing (db/find-progress db filename email)]
         
         (cond
           ;; No email from JWT
           (nil? email)
           (http-resp/forbidden "No email found in authentication token")
+          
+          ;; Progress exists but user is not the creator - reject with 403
+          (and any-existing (not= email (:email any-existing)))
+          (http-resp/forbidden "Only the original creator can update this file's progress")
           
           ;; Progress already completed
           (and existing (:isCompleted existing))
@@ -104,7 +108,7 @@
                 new-progress (cond-> new-progress
                               errors (assoc :errors errors)
                               warnings (assoc :warnings warnings))
-                result (db/create-progress db new-progress)]
+                _ (db/create-progress db new-progress)]
             (http-resp/ok {:result "created" 
                           :filename filename
                           :counts counts
@@ -122,14 +126,14 @@
                 ;; Append new errors and warnings to existing ones
                 all-errors (concat (or (:errors existing) []) (or errors []))
                 all-warnings (concat (or (:warnings existing) []) (or warnings []))
-                update-doc {$set {:counts new-counts
+                update-doc {"$set" {:counts new-counts
                                  :updatedAt now
                                  :isCompleted (boolean isLast)
                                  :errors all-errors
                                  :warnings all-warnings}}
                 ;; Add total if provided and not already set
                 update-doc (if (and total (nil? (:total existing)))
-                            (assoc-in update-doc [$set :total] total)
+                            (assoc-in update-doc ["$set" :total] total)
                             update-doc)]
             
             (db/update-progress db filename email update-doc)
@@ -148,25 +152,31 @@
 (defn get-progress-handler [db]
   (fn [request]
     (try
-      (let [email (get-in request [:identity :email])
-            filename (get-in request [:query-params :filename])]
+      (let [filename (get-in request [:query-params :filename])
+            email (get-in request [:query-params :email])]
         
         (cond
-          ;; No email from JWT
-          (nil? email)
-          (http-resp/forbidden "No email found in authentication token")
-          
-          ;; Get specific file progress
+          ;; Get specific file progress by filename only
           filename
-          (if-let [progress (db/find-progress db filename email)]
+          (if-let [progress (db/find-progress-by-filename db filename)]
             (http-resp/ok (-> progress 
                              (dissoc :_id)
                              (assoc :id (str (:_id progress)))))
             (http-resp/not-found "Progress not found for this file"))
           
-          ;; Get all progress for user
+          ;; Get all progress for specific user by email
+          email
+          (let [user-progress (db/find-all-progress db email)]
+            (http-resp/ok (->> user-progress
+                              (map #(-> %
+                                       (dissoc :_id)
+                                       (assoc :id (str (:_id %)))))
+                              (sort-by :updatedAt)
+                              reverse)))
+          
+          ;; Get all progress from all users
           :else
-          (let [all-progress (db/find-all-progress db email)]
+          (let [all-progress (mc/find-maps db "progress" {})]
             (http-resp/ok (->> all-progress
                               (map #(-> %
                                        (dissoc :_id)
@@ -194,7 +204,7 @@
       :route-name :progress-update]
 
      ["/progress" :get
-      [jwt/auth-interceptor exception-handler (get-progress-handler db)]
+      [exception-handler (get-progress-handler db)]
       :route-name :progress-get]
 
      ["/health" :get

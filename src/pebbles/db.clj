@@ -1,12 +1,16 @@
 (ns pebbles.db
   (:require
-   [monger.collection :as mc]
-   [monger.operators :refer :all]))
+   [monger.collection :as mc]))
 
 (defn find-progress
   "Find progress document by filename and email"
   [db filename email]
   (mc/find-one-as-map db "progress" {:filename filename :email email}))
+
+(defn find-progress-by-filename
+  "Find progress document by filename only (used for authorization checks)"
+  [db filename]
+  (mc/find-one-as-map db "progress" {:filename filename}))
 
 (defn create-progress
   "Create a new progress document"
