@@ -95,7 +95,7 @@ Create or update progress for a file within a client context. Only authenticated
 ```json
 {
   "result": "created",           // or "updated"
-  "clientKrn": "krn:example:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales-data.csv",
   "counts": {
     "done": 150,
@@ -140,19 +140,19 @@ Retrieve progress information for a specific client. No authentication required 
 
 #### Get All Progress for Client
 ```
-GET /clients/krn:example:client:123/progress
+GET /clients/krn:clnt:this-is-opaque-to-us/progress
 ```
 Returns all progress records for the specified client, sorted by most recent updates.
 
 #### Get Specific File Progress
 ```
-GET /clients/krn:example:client:123/progress?filename=sales-data.csv
+GET /clients/krn:clnt:this-is-opaque-to-us/progress?filename=sales-data.csv
 ```
 Returns progress for the specified file within the client.
 
 #### Get User's Progress within Client
 ```
-GET /clients/krn:example:client:123/progress?email=user@example.com
+GET /clients/krn:clnt:this-is-opaque-to-us/progress?email=user@example.com
 ```
 Returns all files being processed by the specified user within the client.
 
@@ -162,7 +162,7 @@ Returns all files being processed by the specified user within the client.
 ```json
 {
   "id": "507f1f77bcf86cd799439011",
-  "clientKrn": "krn:example:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales-data.csv",
   "email": "alice@company.com",
   "counts": {
@@ -194,7 +194,7 @@ Returns all files being processed by the specified user within the client.
 [
   {
     "id": "507f1f77bcf86cd799439011",
-    "clientKrn": "krn:example:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "sales-data.csv",
     "email": "alice@company.com",
     "counts": { "done": 1800, "warn": 25, "failed": 8 },
@@ -207,7 +207,7 @@ Returns all files being processed by the specified user within the client.
   },
   {
     "id": "507f1f77bcf86cd799439012", 
-    "clientKrn": "krn:example:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "customer-import.csv",
     "email": "bob@company.com",
     "counts": { "done": 300, "warn": 5, "failed": 0 },
@@ -237,7 +237,7 @@ The service can consume progress updates from an AWS SQS queue.
 **Message Format:**
 ```json
 {
-  "clientKrn": "krn:example:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "email": "user@example.com",
   "filename": "data.csv",
   "counts": {

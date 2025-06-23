@@ -15,8 +15,8 @@
 ### Multi-Tenant Architecture Flow
 ```mermaid
 graph TD
-    A[Client 1 Worker] --> B[POST /clients/krn:acme:client:123/progress]
-    C[Client 2 Worker] --> D[POST /clients/krn:widgets:client:456/progress]
+    A[Client 1 Worker] --> B[POST /clients/krn:clnt:this-is-opaque-to-us/progress]
+    C[Client 2 Worker] --> D[POST /clients/krn:clnt:another-opaque-id/progress]
     E[SQS Queue] --> F[SQS Consumer]
     G[Kafka Topic] --> H[Kafka Consumer]
     
@@ -28,8 +28,8 @@ graph TD
     I --> J{Validate Client Context}
     J --> K[MongoDB - Client Isolated Data]
     
-    L[Public Monitor] --> M[GET /clients/krn:acme:client:123/progress]
-    N[Dashboard] --> O[GET /clients/krn:widgets:client:456/progress]
+    L[Public Monitor] --> M[GET /clients/krn:clnt:this-is-opaque-to-us/progress]
+    N[Dashboard] --> O[GET /clients/krn:clnt:another-opaque-id/progress]
     
     K --> P[Return Client-Specific Data]
     M --> P
@@ -80,16 +80,16 @@ sequenceDiagram
     
     Note over W1,D: Multi-Channel Progress Updates
     
-    W1->>A: POST /clients/krn:acme:client:123/progress<br/>(Direct API)
+    W1->>A: POST /clients/krn:clnt:this-is-opaque-to-us/progress<br/>(Direct API)
     A->>D: Create/Update progress
     D-->>A: Success
     A-->>W1: 200 OK
     
-    W2->>SQS: Send Message<br/>{clientKrn: "krn:acme:client:123", ...}
+    W2->>SQS: Send Message<br/>{clientKrn: "krn:clnt:this-is-opaque-to-us", ...}
     SQS-->>SC: Poll Message
     SC->>D: Create/Update progress
     
-    W1->>K: Publish Event<br/>{clientKrn: "krn:acme:client:123", ...}
+    W1->>K: Publish Event<br/>{clientKrn: "krn:clnt:this-is-opaque-to-us", ...}
     K-->>KC: Consume Event
     KC->>D: Create/Update progress
     
@@ -104,7 +104,7 @@ sequenceDiagram
 
 #### Request
 ```http
-POST /clients/krn:acme:client:123/progress
+POST /clients/krn:clnt:this-is-opaque-to-us/progress
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
 Content-Type: application/json
 
@@ -139,7 +139,7 @@ Content-Type: application/json
 ```json
 {
   "result": "created",
-  "clientKrn": "krn:acme:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "customer-data.csv",
   "counts": {
     "done": 100,
@@ -174,8 +174,8 @@ Content-Type: application/json
 #### SQS Message Body
 ```json
 {
-  "clientKrn": "krn:acme:client:123",
-  "email": "data-processor@acme.com",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
+  "email": "data-processor@company.com",
   "filename": "customer-data.csv",
   "counts": {
     "done": 200,
@@ -206,8 +206,8 @@ The SQS consumer will process this message and update the progress following the
 #### Kafka Record Value
 ```json
 {
-  "clientKrn": "krn:widgets:client:456",
-  "email": "etl-service@widgets.com",
+  "clientKrn": "krn:clnt:another-opaque-id",
+  "email": "etl-service@company.com",
   "filename": "inventory-update.csv",
   "counts": {
     "done": 500,
@@ -231,7 +231,7 @@ The SQS consumer will process this message and update the progress following the
 
 #### Request - All Progress for Client
 ```http
-GET /clients/krn:acme:client:123/progress
+GET /clients/krn:clnt:this-is-opaque-to-us/progress
 ```
 
 #### Response (200 OK)
@@ -239,9 +239,9 @@ GET /clients/krn:acme:client:123/progress
 [
   {
     "id": "507f1f77bcf86cd799439011",
-    "clientKrn": "krn:acme:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "customer-data.csv",
-    "email": "data-team@acme.com",
+    "email": "data-team@company.com",
     "counts": {
       "done": 995,
       "warn": 10,
@@ -254,9 +254,9 @@ GET /clients/krn:acme:client:123/progress
   },
   {
     "id": "507f1f77bcf86cd799439012",
-    "clientKrn": "krn:acme:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "orders-2024.csv",
-    "email": "etl-service@acme.com",
+    "email": "etl-service@company.com",
     "counts": {
       "done": 450,
       "warn": 2,
@@ -276,16 +276,16 @@ GET /clients/krn:acme:client:123/progress
 
 #### Client 1 Request
 ```http
-GET /clients/krn:acme:client:123/progress?filename=sales-data.csv
+GET /clients/krn:clnt:this-is-opaque-to-us/progress?filename=sales-data.csv
 ```
 
 #### Client 1 Response
 ```json
 {
   "id": "507f1f77bcf86cd799439011",
-  "clientKrn": "krn:acme:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales-data.csv",
-  "email": "data-team@acme.com",
+  "email": "data-team@company.com",
   "counts": {"done": 995, "warn": 10, "failed": 8},
   "total": 1000,
   "isCompleted": true
@@ -294,16 +294,16 @@ GET /clients/krn:acme:client:123/progress?filename=sales-data.csv
 
 #### Client 2 Request (Same filename, different client)
 ```http
-GET /clients/krn:widgets:client:456/progress?filename=sales-data.csv
+GET /clients/krn:clnt:another-opaque-id/progress?filename=sales-data.csv
 ```
 
 #### Client 2 Response
 ```json
 {
   "id": "507f1f77bcf86cd799439013",
-  "clientKrn": "krn:widgets:client:456",
+  "clientKrn": "krn:clnt:another-opaque-id",
   "filename": "sales-data.csv",
-  "email": "analytics@widgets.com",
+  "email": "analytics@company.com",
   "counts": {"done": 1200, "warn": 15, "failed": 3},
   "total": 1500,
   "isCompleted": false
@@ -370,8 +370,8 @@ graph LR
     G --> H
     
     subgraph "Monitoring"
-        I[ACME Dashboard] --> J[GET /clients/krn:acme:client:123/progress]
-        K[Widgets Monitor] --> L[GET /clients/krn:widgets:client:456/progress]
+        I[ACME Dashboard] --> J[GET /clients/krn:clnt:this-is-opaque-to-us/progress]
+        K[Widgets Monitor] --> L[GET /clients/krn:clnt:another-opaque-id/progress]
     end
     
     J --> G
@@ -425,24 +425,24 @@ sequenceDiagram
     
     Note over AC,D: Different clients can process same filename
     
-    AC->>A: POST /clients/krn:acme:client:123/progress<br/>{filename: "data.csv", ...}
+    AC->>A: POST /clients/krn:clnt:this-is-opaque-to-us/progress<br/>{filename: "data.csv", ...}
     A->>D: Create progress (client: ACME)
     D-->>A: Success
     A-->>AC: 200 Created
     
-    WC->>A: POST /clients/krn:widgets:client:456/progress<br/>{filename: "data.csv", ...}
+    WC->>A: POST /clients/krn:clnt:another-opaque-id/progress<br/>{filename: "data.csv", ...}
     A->>D: Create progress (client: Widgets)
     D-->>A: Success
     A-->>WC: 200 Created
     
     Note over AC,D: Each client has isolated progress
     
-    AC->>A: GET /clients/krn:acme:client:123/progress?filename=data.csv
+    AC->>A: GET /clients/krn:clnt:this-is-opaque-to-us/progress?filename=data.csv
     A->>D: Find by clientKrn + filename
     D-->>A: ACME's progress only
     A-->>AC: 200 OK (ACME data)
     
-    WC->>A: GET /clients/krn:widgets:client:456/progress?filename=data.csv
+    WC->>A: GET /clients/krn:clnt:another-opaque-id/progress?filename=data.csv
     A->>D: Find by clientKrn + filename
     D-->>A: Widgets' progress only
     A-->>WC: 200 OK (Widgets data)
@@ -460,12 +460,12 @@ sequenceDiagram
     
     Note over W,D: Same file updated via multiple channels
     
-    W->>SQ: Send initial progress<br/>{clientKrn: "krn:acme:client:123",<br/>filename: "large-file.csv",<br/>counts: {done: 1000}}
+    W->>SQ: Send initial progress<br/>{clientKrn: "krn:clnt:this-is-opaque-to-us",<br/>filename: "large-file.csv",<br/>counts: {done: 1000}}
     
     SQ-->>SC: Consume message
     SC->>D: Create progress
     
-    W->>K: Send update<br/>{clientKrn: "krn:acme:client:123",<br/>filename: "large-file.csv",<br/>counts: {done: 2000}}
+    W->>K: Send update<br/>{clientKrn: "krn:clnt:this-is-opaque-to-us",<br/>filename: "large-file.csv",<br/>counts: {done: 2000}}
     
     K-->>KC: Consume event
     KC->>D: Update progress (accumulate)

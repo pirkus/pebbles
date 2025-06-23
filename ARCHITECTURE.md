@@ -175,7 +175,7 @@ db.progress.createIndex({ clientKrn: 1 })
 ```json
 {
     "_id": ObjectId("..."),
-    "clientKrn": "krn:acme:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "sales_data.csv",
     "email": "user@acme.com",
     "counts": {

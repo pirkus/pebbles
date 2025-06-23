@@ -3,13 +3,13 @@
 ## Prerequisites
 - Pebbles service running on `http://localhost:8081`
 - Valid Google JWT token
-- Client KRN (e.g., `krn:acme:client:123`)
+- Client KRN (e.g., `krn:clnt:this-is-opaque-to-us`)
 
 ## Example: Processing a CSV File for a Client
 
 ### 1. Start processing - First update with total
 ```bash
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -27,7 +27,7 @@ Response:
 ```json
 {
   "result": "created",
-  "clientKrn": "krn:acme:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales_data_2024.csv",
   "counts": {
     "done": 100,
@@ -41,7 +41,7 @@ Response:
 
 ### 2. Update progress - Incremental updates
 ```bash
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -58,7 +58,7 @@ Response:
 ```json
 {
   "result": "updated",
-  "clientKrn": "krn:acme:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales_data_2024.csv",
   "counts": {
     "done": 600,
@@ -74,7 +74,7 @@ Response:
 
 ### 2b. Update progress with errors and warnings
 ```bash
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -115,7 +115,7 @@ Response:
 ```json
 {
   "result": "updated",
-  "clientKrn": "krn:acme:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales_data_2024.csv",
   "counts": {
     "done": 900,
@@ -153,7 +153,7 @@ Response:
 
 ### 3. Complete processing - Mark as finished
 ```bash
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -171,7 +171,7 @@ Response:
 ```json
 {
   "result": "updated",
-  "clientKrn": "krn:acme:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales_data_2024.csv",
   "counts": {
     "done": 9988,
@@ -185,16 +185,16 @@ Response:
 
 ### 4. Get progress for specific file within client
 ```bash
-curl -X GET "http://localhost:8081/clients/krn:acme:client:123/progress?filename=sales_data_2024.csv"
+curl -X GET "http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress?filename=sales_data_2024.csv"
 ```
 
 Response:
 ```json
 {
   "id": "507f1f77bcf86cd799439011",
-  "clientKrn": "krn:acme:client:123",
+  "clientKrn": "krn:clnt:this-is-opaque-to-us",
   "filename": "sales_data_2024.csv",
-  "email": "user@acme.com",
+  "email": "user@company.com",
   "counts": {
     "done": 9988,
     "warn": 15,
@@ -245,7 +245,7 @@ Response:
 
 ### 5. Get all progress for a user within a client
 ```bash
-curl -X GET "http://localhost:8081/clients/krn:acme:client:123/progress?email=user@acme.com"
+curl -X GET "http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress?email=user@company.com"
 ```
 
 Response:
@@ -253,9 +253,9 @@ Response:
 [
   {
     "id": "507f1f77bcf86cd799439011",
-    "clientKrn": "krn:acme:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "sales_data_2024.csv",
-    "email": "user@acme.com",
+    "email": "user@company.com",
     "counts": {
       "done": 9988,
       "warn": 15,
@@ -268,9 +268,9 @@ Response:
   },
   {
     "id": "507f1f77bcf86cd799439012",
-    "clientKrn": "krn:acme:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "inventory_update.csv",
-    "email": "user@acme.com",
+    "email": "user@company.com",
     "counts": {
       "done": 450,
       "warn": 0,
@@ -286,7 +286,7 @@ Response:
 
 ### 6. Get all progress for a client
 ```bash
-curl -X GET "http://localhost:8081/clients/krn:acme:client:123/progress"
+curl -X GET "http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress"
 ```
 
 Response:
@@ -294,9 +294,9 @@ Response:
 [
   {
     "id": "507f1f77bcf86cd799439011",
-    "clientKrn": "krn:acme:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "sales_data_2024.csv",
-    "email": "user@acme.com",
+    "email": "user@company.com",
     "counts": {
       "done": 9988,
       "warn": 15,
@@ -309,9 +309,9 @@ Response:
   },
   {
     "id": "507f1f77bcf86cd799439013",
-    "clientKrn": "krn:acme:client:123",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
     "filename": "customer_import.csv",
-    "email": "etl-service@acme.com",
+    "email": "etl-service@company.com",
     "counts": {
       "done": 450,
       "warn": 0,
@@ -336,8 +336,8 @@ sqs = boto3.client('sqs', region_name='us-east-1')
 queue_url = 'https://sqs.us-east-1.amazonaws.com/123456789/pebbles-progress'
 
 message = {
-    "clientKrn": "krn:acme:client:123",
-    "email": "worker@acme.com",
+    "clientKrn": "krn:clnt:this-is-opaque-to-us",
+    "email": "worker@company.com",
     "filename": "large_dataset.csv",
     "counts": {
         "done": 1000,
@@ -372,8 +372,8 @@ producer = KafkaProducer(
 )
 
 message = {
-    "clientKrn": "krn:widgets:client:456",
-    "email": "stream-processor@widgets.com",
+    "clientKrn": "krn:clnt:another-opaque-id",
+    "email": "stream-processor@company.com",
     "filename": "realtime_data.csv",
     "counts": {
         "done": 5000,
@@ -392,7 +392,7 @@ producer.flush()
 ### Different clients processing same filename
 ```bash
 # Client 1: ACME Corp
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer ACME_USER_JWT" \
   -H "Content-Type: application/json" \
   -d '{
@@ -401,7 +401,7 @@ curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
   }'
 
 # Client 2: Widgets Inc (same filename, different client)
-curl -X POST http://localhost:8081/clients/krn:widgets:client:456/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:another-opaque-id/progress \
   -H "Authorization: Bearer WIDGETS_USER_JWT" \
   -H "Content-Type: application/json" \
   -d '{
@@ -417,7 +417,7 @@ curl -X POST http://localhost:8081/clients/krn:widgets:client:456/progress \
 ### Attempting to update another user's file
 ```bash
 # User A creates progress
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer USER_A_JWT" \
   -H "Content-Type: application/json" \
   -d '{
@@ -426,7 +426,7 @@ curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
   }'
 
 # User B tries to update it
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer USER_B_JWT" \
   -H "Content-Type: application/json" \
   -d '{
@@ -444,7 +444,7 @@ Response:
 
 ### Attempting to update completed progress
 ```bash
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -462,7 +462,7 @@ Response:
 
 ### Missing authorization
 ```bash
-curl -X POST http://localhost:8081/clients/krn:acme:client:123/progress \
+curl -X POST http://localhost:8081/clients/krn:clnt:this-is-opaque-to-us/progress \
   -H "Content-Type: application/json" \
   -d '{
     "filename": "test.csv",
