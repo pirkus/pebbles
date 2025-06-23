@@ -1,17 +1,24 @@
 # Pebbles
 
-A file processing progress tracking service built with Clojure and MongoDB that provides real-time monitoring and secure update capabilities.
+A multi-tenant file processing progress tracking service built with Clojure and MongoDB that provides real-time monitoring, secure update capabilities, and multiple integration options.
 
 ## Overview
 
-Pebbles is a REST API service that tracks the progress of file processing operations. It provides endpoints to:
+Pebbles is a REST API service that tracks the progress of file processing operations in a multi-tenant environment. It provides endpoints to:
 - **Update progress** for a file (counts of done, warnings, and failures) - **Authenticated**
-- **Retrieve progress** for specific files, users, or all files - **Public access**
+- **Retrieve progress** for specific files, users, or all files within a client - **Public access**
 - **Monitor processing** in real-time with detailed error/warning tracking
 - **Enforce authorization** - only file creators can update their files
 - **Lock completion** - once marked complete, no further updates allowed
+- **Multi-tenant support** - isolate data by client using clientKrn
+- **Consume updates** from SQS queues and Kafka topics
 
 ## Key Features
+
+### Multi-Tenancy
+- **Client Isolation**: Each client's data is isolated using clientKrn (Client KRN)
+- **Hierarchical URLs**: RESTful API structure `/clients/{clientKrn}/progress`
+- **Client-scoped Operations**: All operations are scoped to the specific client
 
 ### Security & Authorization
 - **JWT Authentication**: Uses Google JWT tokens for update operations
@@ -26,20 +33,30 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 - **Real-time Status**: Updated timestamps and completion status
 
 ### Data Management
-- **User Isolation**: Each user-file combination creates a unique progress record
+- **User Isolation**: Each client-user-file combination creates a unique progress record
 - **MongoDB Storage**: Persistent storage with optimized indexes
 - **Functional Design**: Immutable data structures and pure functions
+
+### Integration Options
+- **REST API**: Direct HTTP endpoint for real-time updates
+- **SQS Consumer**: Process updates from AWS SQS queues
+- **Kafka Consumer**: Process updates from Kafka topics
 
 ## Prerequisites
 
 - Java 11+
 - Clojure CLI tools
 - MongoDB (or Docker for tests)
+- AWS credentials (for SQS integration)
+- Kafka cluster (for Kafka integration)
 
 ## API Endpoints
 
-### POST /progress - Update Progress (Authenticated)
-Create or update progress for a file. Only authenticated users can update, and only the original creator can modify their file's progress.
+### POST /clients/{clientKrn}/progress - Update Progress (Authenticated)
+Create or update progress for a file within a client context. Only authenticated users can update, and only the original creator can modify their file's progress.
+
+**Parameters:**
+- `clientKrn` (path parameter): Client identifier
 
 **Headers:**
 - `Authorization: Bearer <JWT_TOKEN>` (Required)
@@ -78,6 +95,7 @@ Create or update progress for a file. Only authenticated users can update, and o
 ```json
 {
   "result": "created",           // or "updated"
+  "clientKrn": "krn:example:client:123",
   "filename": "sales-data.csv",
   "counts": {
     "done": 150,
@@ -110,32 +128,33 @@ Create or update progress for a file. Only authenticated users can update, and o
 - **400 Bad Request**: If file is already completed
 - **400 Bad Request**: If request validation fails
 
-### GET /progress - Retrieve Progress (Public)
-Retrieve progress information. No authentication required - supports public monitoring.
+### GET /clients/{clientKrn}/progress - Retrieve Progress (Public)
+Retrieve progress information for a specific client. No authentication required - supports public monitoring.
 
-**Query Parameters:**
-- `filename` (optional): Get progress for a specific file (any user's)
-- `email` (optional): Get all progress for a specific user
+**Parameters:**
+- `clientKrn` (path parameter): Client identifier
+- `filename` (query parameter, optional): Get progress for a specific file
+- `email` (query parameter, optional): Get all progress for a specific user
 
 **Access Patterns:**
 
-#### Get All Progress (Public Dashboard)
+#### Get All Progress for Client
 ```
-GET /progress
+GET /clients/krn:example:client:123/progress
 ```
-Returns progress from all users, sorted by most recent updates.
+Returns all progress records for the specified client, sorted by most recent updates.
 
 #### Get Specific File Progress
 ```
-GET /progress?filename=sales-data.csv
+GET /clients/krn:example:client:123/progress?filename=sales-data.csv
 ```
-Returns progress for the specified file (regardless of which user is processing it).
+Returns progress for the specified file within the client.
 
-#### Get User's Progress
+#### Get User's Progress within Client
 ```
-GET /progress?email=user@example.com
+GET /clients/krn:example:client:123/progress?email=user@example.com
 ```
-Returns all files being processed by the specified user.
+Returns all files being processed by the specified user within the client.
 
 **Response Examples:**
 
@@ -143,6 +162,7 @@ Returns all files being processed by the specified user.
 ```json
 {
   "id": "507f1f77bcf86cd799439011",
+  "clientKrn": "krn:example:client:123",
   "filename": "sales-data.csv",
   "email": "alice@company.com",
   "counts": {
@@ -174,6 +194,7 @@ Returns all files being processed by the specified user.
 [
   {
     "id": "507f1f77bcf86cd799439011",
+    "clientKrn": "krn:example:client:123",
     "filename": "sales-data.csv",
     "email": "alice@company.com",
     "counts": { "done": 1800, "warn": 25, "failed": 8 },
@@ -186,6 +207,7 @@ Returns all files being processed by the specified user.
   },
   {
     "id": "507f1f77bcf86cd799439012", 
+    "clientKrn": "krn:example:client:123",
     "filename": "customer-import.csv",
     "email": "bob@company.com",
     "counts": { "done": 300, "warn": 5, "failed": 0 },
@@ -207,24 +229,73 @@ Simple health check endpoint.
 OK
 ```
 
+## Message Queue Integration
+
+### SQS Consumer
+The service can consume progress updates from an AWS SQS queue.
+
+**Message Format:**
+```json
+{
+  "clientKrn": "krn:example:client:123",
+  "email": "user@example.com",
+  "filename": "data.csv",
+  "counts": {
+    "done": 100,
+    "warn": 5,
+    "failed": 2
+  },
+  "total": 1000,
+  "isLast": false,
+  "errors": [...],
+  "warnings": [...]
+}
+```
+
+**Configuration:**
+- `SQS_ENABLED=true`: Enable SQS consumer
+- `SQS_QUEUE_URL`: Full URL of the SQS queue
+- `AWS_REGION`: AWS region (default: us-east-1)
+
+### Kafka Consumer
+The service can consume progress updates from a Kafka topic.
+
+**Message Format:** Same as SQS (JSON)
+
+**Configuration:**
+- `KAFKA_ENABLED=true`: Enable Kafka consumer
+- `KAFKA_BOOTSTRAP_SERVERS`: Kafka broker addresses
+- `KAFKA_TOPIC_NAME`: Topic to consume from
+- `KAFKA_GROUP_ID`: Consumer group ID (default: pebbles-consumer)
+
 ## Common Use Cases
 
 See [use-cases.md](use-cases.md) for detailed examples including:
 
-1. **Clean Processing with Known Total**: Simple workflow with predetermined record count
-2. **Complex Processing with Errors**: Mid-process total discovery with error accumulation  
-3. **Streaming Process**: Dynamic total discovery during processing
-4. **Parallel Processing & Authorization**: Multiple users processing different files
+1. **Multi-tenant File Processing**: Different clients processing files in isolation
+2. **Distributed Processing with SQS**: Workers sending updates via SQS
+3. **Streaming Updates via Kafka**: Real-time progress streaming
+4. **Cross-client Monitoring**: Viewing progress across multiple clients
 
 ## Configuration
 
 **Environment Variables:**
 - `MONGO_URI`: MongoDB connection string (default: `mongodb://localhost:27017/pebbles`)
 - `PORT`: HTTP server port (default: `8081`)
+- `SQS_ENABLED`: Enable SQS consumer (true/false)
+- `SQS_QUEUE_URL`: SQS queue URL
+- `AWS_REGION`: AWS region for SQS
+- `KAFKA_ENABLED`: Enable Kafka consumer (true/false)
+- `KAFKA_BOOTSTRAP_SERVERS`: Kafka brokers
+- `KAFKA_TOPIC_NAME`: Kafka topic name
+- `KAFKA_GROUP_ID`: Kafka consumer group ID
 
 **Database:**
 - Collection: `progress`
-- Indexes: Compound unique on `filename + email`, single on `email`
+- Indexes: 
+  - Compound unique on `clientKrn + filename + email`
+  - Compound on `clientKrn + email`
+  - Single on `clientKrn`
 
 ## Running the Application
 
@@ -241,6 +312,16 @@ clj -M -m pebbles.system
 ### Docker
 ```bash
 docker-compose up
+```
+
+### With SQS Consumer
+```bash
+SQS_ENABLED=true SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/123456789/my-queue clj -M -m pebbles.system
+```
+
+### With Kafka Consumer
+```bash
+KAFKA_ENABLED=true KAFKA_BOOTSTRAP_SERVERS=localhost:9092 KAFKA_TOPIC_NAME=progress-updates clj -M -m pebbles.system
 ```
 
 ## Running Tests
@@ -262,7 +343,9 @@ pebbles/
 │       ├── http_resp.clj # HTTP response utilities  
 │       ├── jwt.clj       # JWT authentication
 │       ├── specs.clj     # Request/response validation
-│       └── system.clj    # Main system components and handlers
+│       ├── system.clj    # Main system components and handlers
+│       ├── sqs_consumer.clj   # SQS consumer component
+│       └── kafka_consumer.clj # Kafka consumer component
 ├── test/
 │   └── pebbles/
 │       ├── db_test.clj
@@ -283,13 +366,15 @@ pebbles/
 
 | Feature | Behavior |
 |---------|----------|
+| **Multi-tenancy** | All operations are scoped to clientKrn |
 | **Progress Updates** | Counts are accumulated (added), not replaced |
-| **File Ownership** | First user to create progress owns the file |
+| **File Ownership** | First user to create progress owns the file within a client |
 | **Authorization** | Only file owner can update; anyone can read |
 | **Completion** | Once `isLast: true`, progress becomes immutable |
 | **Error Tracking** | Errors/warnings accumulate across all updates |
 | **Total Discovery** | Total can be set/updated on any request |
 | **Data Security** | Server generates all timestamps; client values ignored |
+| **Message Processing** | SQS/Kafka messages follow same validation rules as HTTP |
 
 ## Response Codes
 
@@ -304,12 +389,14 @@ pebbles/
 
 ## Design Principles
 
-1. **Functional Style**: Immutable data structures and pure functions where possible
-2. **Security by Design**: Authentication for updates, authorization for ownership
-3. **Public Transparency**: Anyone can monitor progress without credentials
-4. **Incremental Processing**: Support for distributed/parallel processing workers
-5. **Error Visibility**: Comprehensive error and warning tracking with context
-6. **Completion Integrity**: Immutable state once processing is marked complete
+1. **Multi-tenant Architecture**: Complete data isolation between clients
+2. **Functional Style**: Immutable data structures and pure functions where possible
+3. **Security by Design**: Authentication for updates, authorization for ownership
+4. **Public Transparency**: Anyone can monitor progress without credentials
+5. **Incremental Processing**: Support for distributed/parallel processing workers
+6. **Error Visibility**: Comprehensive error and warning tracking with context
+7. **Completion Integrity**: Immutable state once processing is marked complete
+8. **Integration Flexibility**: Multiple ways to send updates (HTTP, SQS, Kafka)
 
 ## CI/CD
 

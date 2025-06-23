@@ -4,6 +4,7 @@
 ;; Common specs
 (s/def ::filename string?)
 (s/def ::email string?)
+(s/def ::clientKrn string?)
 
 ;; Count specs
 (s/def ::done (s/and integer? #(>= % 0)))

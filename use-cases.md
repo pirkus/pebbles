@@ -1,26 +1,51 @@
-# 📡 API Documentation & Use Cases
+# 📡 Multi-Tenant API Documentation & Use Cases
 
 ## API Endpoints Overview
 
 | Method | Endpoint | Authentication | Purpose |
 |--------|----------|----------------|---------|
-| `POST` | `/progress` | ✅ Required (JWT) | Create/Update progress |
-| `GET` | `/progress` | ❌ Public | View progress data |
+| `POST` | `/clients/{clientKrn}/progress` | ✅ Required (JWT) | Create/Update progress |
+| `GET` | `/clients/{clientKrn}/progress` | ❌ Public | View progress data |
 | `GET` | `/health` | ❌ Public | Health check |
 
 ---
 
 ## 🔄 Use Case Diagrams
 
-### Main Flow Diagram
+### Multi-Tenant Architecture Flow
 ```mermaid
 graph TD
-    A[File Processing Client] --> B{Authentication Required?}
+    A[Client 1 Worker] --> B[POST /clients/krn:acme:client:123/progress]
+    C[Client 2 Worker] --> D[POST /clients/krn:widgets:client:456/progress]
+    E[SQS Queue] --> F[SQS Consumer]
+    G[Kafka Topic] --> H[Kafka Consumer]
+    
+    F --> I[Process Update]
+    H --> I
+    B --> I
+    D --> I
+    
+    I --> J{Validate Client Context}
+    J --> K[MongoDB - Client Isolated Data]
+    
+    L[Public Monitor] --> M[GET /clients/krn:acme:client:123/progress]
+    N[Dashboard] --> O[GET /clients/krn:widgets:client:456/progress]
+    
+    K --> P[Return Client-Specific Data]
+    M --> P
+    O --> P
+```
+
+### Main Flow Diagram with Multi-Tenancy
+```mermaid
+graph TD
+    A[File Processing Client] --> AA{Client Context}
+    AA --> B{Authentication Required?}
     B -->|Yes - POST| C[JWT Token Required]
     B -->|No - GET| D[Public Access]
     
     C --> E[Create/Update Progress]
-    E --> F{Progress Exists?}
+    E --> F{Progress Exists in Client?}
     F -->|No| G[Create New Progress]
     F -->|Yes| H{Same User?}
     H -->|Yes| I{Completed?}
@@ -30,67 +55,56 @@ graph TD
     
     D --> M[View Progress]
     M --> N{Query Type?}
-    N -->|No params| O[All Progress Records]
-    N -->|filename param| P[Specific File Progress]
-    N -->|email param| Q[User's All Progress]
+    N -->|No params| O[All Client Progress]
+    N -->|filename param| P[Specific File in Client]
+    N -->|email param| Q[User's Progress in Client]
     
     G --> R[Return Created Response]
     K --> S[Return Updated Response]
-    O --> T[Return All Records]
+    O --> T[Return Client Records]
     P --> U[Return File Progress]
     Q --> V[Return User Progress]
 ```
 
-### File Processing Workflow
+### Multi-Channel Processing Workflow
 ```mermaid
 sequenceDiagram
-    participant C as Client App
+    participant W1 as Worker 1
+    participant W2 as Worker 2
+    participant SQS as SQS Queue
+    participant K as Kafka Topic
     participant A as API Server
+    participant SC as SQS Consumer
+    participant KC as Kafka Consumer
     participant D as MongoDB
-    participant J as JWT Provider
     
-    Note over C,D: File Processing Workflow
+    Note over W1,D: Multi-Channel Progress Updates
     
-    C->>J: Get JWT Token
-    J-->>C: Return JWT
+    W1->>A: POST /clients/krn:acme:client:123/progress<br/>(Direct API)
+    A->>D: Create/Update progress
+    D-->>A: Success
+    A-->>W1: 200 OK
     
-    C->>A: POST /progress (with JWT)<br/>Initial batch progress
-    A->>A: Validate JWT & params
-    A->>D: Create progress document
-    D-->>A: Document created
-    A-->>C: 200 Created response
+    W2->>SQS: Send Message<br/>{clientKrn: "krn:acme:client:123", ...}
+    SQS-->>SC: Poll Message
+    SC->>D: Create/Update progress
     
-    loop Processing batches
-        C->>A: POST /progress (with JWT)<br/>Update with new counts
-        A->>A: Validate JWT & authorization
-        A->>D: Update progress (add counts)
-        D-->>A: Document updated
-        A-->>C: 200 Updated response
-    end
+    W1->>K: Publish Event<br/>{clientKrn: "krn:acme:client:123", ...}
+    K-->>KC: Consume Event
+    KC->>D: Create/Update progress
     
-    C->>A: POST /progress (with JWT)<br/>Final batch (isLast: true)
-    A->>A: Validate JWT & authorization
-    A->>D: Update progress (mark completed)
-    D-->>A: Document updated
-    A-->>C: 200 Updated response (completed)
-    
-    Note over C,D: Public Progress Viewing
-    
-    C->>A: GET /progress?filename=data.csv
-    A->>D: Find progress by filename
-    D-->>A: Return progress document
-    A-->>C: 200 Progress data
+    Note over W1,D: All updates accumulate in same progress record
 ```
 
 ---
 
 ## 📝 API Request/Response Examples
 
-### 1. CREATE New Progress (POST /progress)
+### 1. CREATE New Progress - Multi-Tenant (POST /clients/{clientKrn}/progress)
 
 #### Request
 ```http
-POST /progress
+POST /clients/krn:acme:client:123/progress
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
 Content-Type: application/json
 
@@ -125,6 +139,7 @@ Content-Type: application/json
 ```json
 {
   "result": "created",
+  "clientKrn": "krn:acme:client:123",
   "filename": "customer-data.csv",
   "counts": {
     "done": 100,
@@ -154,15 +169,13 @@ Content-Type: application/json
 
 ---
 
-### 2. UPDATE Existing Progress (POST /progress)
+### 2. SQS Message Format for Progress Update
 
-#### Request
-```http
-POST /progress
-Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
-Content-Type: application/json
-
+#### SQS Message Body
+```json
 {
+  "clientKrn": "krn:acme:client:123",
+  "email": "data-processor@acme.com",
   "filename": "customer-data.csv",
   "counts": {
     "done": 200,
@@ -184,117 +197,29 @@ Content-Type: application/json
 }
 ```
 
-#### Response (200 Updated)
-```json
-{
-  "result": "updated",
-  "filename": "customer-data.csv",
-  "counts": {
-    "done": 300,
-    "warn": 8,
-    "failed": 3
-  },
-  "total": 1000,
-  "isCompleted": false,
-  "errors": [
-    {
-      "line": 15,
-      "message": "Invalid email format in customer record"
-    },
-    {
-      "line": 42,
-      "message": "Missing required field: phone_number"
-    },
-    {
-      "line": 156,
-      "message": "Duplicate customer ID detected"
-    }
-  ],
-  "warnings": [
-    {
-      "line": 8,
-      "message": "Deprecated field 'fax' still in use"
-    },
-    {
-      "line": 134,
-      "message": "Address format differs from standard"
-    }
-  ]
-}
-```
+The SQS consumer will process this message and update the progress following the same rules as the HTTP endpoint.
 
 ---
 
-### 3. COMPLETE Processing (POST /progress)
+### 3. Kafka Message Format for Progress Update
 
-#### Request
-```http
-POST /progress
-Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
-Content-Type: application/json
-
+#### Kafka Record Value
+```json
 {
-  "filename": "customer-data.csv",
+  "clientKrn": "krn:widgets:client:456",
+  "email": "etl-service@widgets.com",
+  "filename": "inventory-update.csv",
   "counts": {
-    "done": 695,
-    "warn": 2,
+    "done": 500,
+    "warn": 10,
     "failed": 5
   },
-  "isLast": true
-}
-```
-
-#### Response (200 Completed)
-```json
-{
-  "result": "updated",
-  "filename": "customer-data.csv",
-  "counts": {
-    "done": 995,
-    "warn": 10,
-    "failed": 8
-  },
-  "total": 1000,
-  "isCompleted": true,
-  "errors": [...],
-  "warnings": [...]
-}
-```
-
----
-
-### 4. GET Specific File Progress (GET /progress)
-
-#### Request
-```http
-GET /progress?filename=customer-data.csv
-```
-
-#### Response (200 OK)
-```json
-{
-  "id": "507f1f77bcf86cd799439011",
-  "filename": "customer-data.csv",
-  "email": "data-team@company.com",
-  "counts": {
-    "done": 995,
-    "warn": 10,
-    "failed": 8
-  },
-  "total": 1000,
-  "isCompleted": true,
-  "createdAt": "2024-12-19T14:00:00.000Z",
-  "updatedAt": "2024-12-19T17:45:30.789Z",
+  "total": 5000,
+  "isLast": false,
   "errors": [
     {
-      "line": 15,
-      "message": "Invalid email format in customer record"
-    }
-  ],
-  "warnings": [
-    {
-      "line": 8,
-      "message": "Deprecated field 'fax' still in use"
+      "line": 234,
+      "message": "Invalid SKU format"
     }
   ]
 }
@@ -302,11 +227,11 @@ GET /progress?filename=customer-data.csv
 
 ---
 
-### 5. GET All Progress for User (GET /progress)
+### 4. GET Progress for Specific Client (GET /clients/{clientKrn}/progress)
 
-#### Request
+#### Request - All Progress for Client
 ```http
-GET /progress?email=data-team@company.com
+GET /clients/krn:acme:client:123/progress
 ```
 
 #### Response (200 OK)
@@ -314,9 +239,14 @@ GET /progress?email=data-team@company.com
 [
   {
     "id": "507f1f77bcf86cd799439011",
+    "clientKrn": "krn:acme:client:123",
     "filename": "customer-data.csv",
-    "email": "data-team@company.com",
-    "counts": {"done": 995, "warn": 10, "failed": 8},
+    "email": "data-team@acme.com",
+    "counts": {
+      "done": 995,
+      "warn": 10,
+      "failed": 8
+    },
     "total": 1000,
     "isCompleted": true,
     "createdAt": "2024-12-19T14:00:00.000Z",
@@ -324,9 +254,14 @@ GET /progress?email=data-team@company.com
   },
   {
     "id": "507f1f77bcf86cd799439012",
-    "filename": "inventory-update.csv",
-    "email": "data-team@company.com",
-    "counts": {"done": 450, "warn": 2, "failed": 1},
+    "clientKrn": "krn:acme:client:123",
+    "filename": "orders-2024.csv",
+    "email": "etl-service@acme.com",
+    "counts": {
+      "done": 450,
+      "warn": 2,
+      "failed": 1
+    },
     "total": 500,
     "isCompleted": false,
     "createdAt": "2024-12-19T16:30:00.000Z",
@@ -337,35 +272,42 @@ GET /progress?email=data-team@company.com
 
 ---
 
-### 6. GET All Progress (No params) (GET /progress)
+### 5. GET Progress Across Different Clients
 
-#### Request
+#### Client 1 Request
 ```http
-GET /progress
+GET /clients/krn:acme:client:123/progress?filename=sales-data.csv
 ```
 
-#### Response (200 OK)
+#### Client 1 Response
 ```json
-[
-  {
-    "id": "507f1f77bcf86cd799439011",
-    "filename": "customer-data.csv",
-    "email": "data-team@company.com",
-    "counts": {"done": 995, "warn": 10, "failed": 8},
-    "isCompleted": true,
-    "createdAt": "2024-12-19T14:00:00.000Z",
-    "updatedAt": "2024-12-19T17:45:30.789Z"
-  },
-  {
-    "id": "507f1f77bcf86cd799439013",
-    "filename": "sales-report.csv",
-    "email": "analyst@company.com",
-    "counts": {"done": 1200, "warn": 15, "failed": 3},
-    "isCompleted": false,
-    "createdAt": "2024-12-19T15:00:00.000Z",
-    "updatedAt": "2024-12-19T17:30:22.123Z"
-  }
-]
+{
+  "id": "507f1f77bcf86cd799439011",
+  "clientKrn": "krn:acme:client:123",
+  "filename": "sales-data.csv",
+  "email": "data-team@acme.com",
+  "counts": {"done": 995, "warn": 10, "failed": 8},
+  "total": 1000,
+  "isCompleted": true
+}
+```
+
+#### Client 2 Request (Same filename, different client)
+```http
+GET /clients/krn:widgets:client:456/progress?filename=sales-data.csv
+```
+
+#### Client 2 Response
+```json
+{
+  "id": "507f1f77bcf86cd799439013",
+  "clientKrn": "krn:widgets:client:456",
+  "filename": "sales-data.csv",
+  "email": "analytics@widgets.com",
+  "counts": {"done": 1200, "warn": 15, "failed": 3},
+  "total": 1500,
+  "isCompleted": false
+}
 ```
 
 ---
@@ -379,55 +321,156 @@ GET /progress
 }
 ```
 
-### Authorization Failed (403)
+### Authorization Failed - Cross-Client Update Attempt (403)
 ```json
 {
   "error": "Only the original creator can update this file's progress"
 }
 ```
 
-### Validation Error (400)
-```json
-{
-  "error": "Invalid parameters: counts.done must be >= 0"
-}
-```
-
-### File Not Found (404)
+### Client Not Found (404)
 ```json
 {
   "error": "Progress not found for this file"
 }
 ```
 
-### Already Completed (400)
-```json
-{
-  "error": "This file processing has already been completed"
-}
+---
+
+## 🎯 Common Multi-Tenant Use Case Scenarios
+
+```mermaid
+graph LR
+    subgraph "Client: ACME Corp"
+        A1[Worker Pool] --> B1[SQS Queue]
+        B1 --> C1[Progress Updates]
+        D1[Direct API] --> C1
+    end
+    
+    subgraph "Client: Widgets Inc"
+        A2[ETL Pipeline] --> B2[Kafka Topic]
+        B2 --> C2[Progress Updates]
+        D2[Batch Jobs] --> C2
+    end
+    
+    subgraph "Pebbles Service"
+        E[SQS Consumer]
+        F[Kafka Consumer]
+        G[HTTP API]
+        H[(MongoDB)]
+    end
+    
+    C1 --> E
+    C1 --> G
+    C2 --> F
+    C2 --> G
+    
+    E --> H
+    F --> H
+    G --> H
+    
+    subgraph "Monitoring"
+        I[ACME Dashboard] --> J[GET /clients/krn:acme:client:123/progress]
+        K[Widgets Monitor] --> L[GET /clients/krn:widgets:client:456/progress]
+    end
+    
+    J --> G
+    L --> G
+```
+
+## 🔧 Multi-Tenant Key Behaviors
+
+| Behavior | Description | Example |
+|----------|-------------|---------|
+| **Client Isolation** | Each client's data is completely isolated | ACME can't see Widgets' progress |
+| **Unique Progress Keys** | Progress identified by clientKrn + filename + email | Same filename can exist in different clients |
+| **Cross-Client Authorization** | Users can only update within their client context | JWT email must match progress creator |
+| **Channel Agnostic** | Updates via HTTP, SQS, or Kafka are equivalent | All channels follow same validation |
+| **Client-Scoped Queries** | All queries are scoped to specific client | No global queries across clients |
+
+## 📊 Integration Patterns
+
+### Pattern 1: Distributed Workers with SQS
+```
+Worker 1 ─┐
+Worker 2 ─┼─> SQS Queue ─> SQS Consumer ─> MongoDB
+Worker 3 ─┘
+```
+
+### Pattern 2: Real-time Streaming with Kafka
+```
+Service A ─┐
+Service B ─┼─> Kafka Topic ─> Kafka Consumer ─> MongoDB
+Service C ─┘
+```
+
+### Pattern 3: Hybrid Approach
+```
+Legacy System ──> HTTP API ─┐
+Modern Workers ─> SQS ──────┼─> MongoDB
+Stream Processor > Kafka ───┘
 ```
 
 ---
 
-## 🎯 Common Use Case Scenarios
+## 📋 Detailed Multi-Tenant Sequence Diagrams
 
+### Scenario: Multiple Clients Processing Same Filename
 ```mermaid
-graph LR
-    A[Data Processing App] --> B[Batch 1<br/>100 records]
-    B --> C[POST /progress<br/>counts: done=95, warn=3, failed=2]
-    C --> D[Batch 2<br/>200 records]
-    D --> E[POST /progress<br/>counts: done=185, warn=10, failed=5]
-    E --> F[Batch 3<br/>150 records - Final]
-    F --> G[POST /progress<br/>counts: done=145, warn=2, failed=3<br/>isLast: true]
+sequenceDiagram
+    participant AC as ACME Client
+    participant WC as Widgets Client
+    participant A as API Server
+    participant D as MongoDB
     
-    H[Dashboard App] --> I[GET /progress<br/>All files overview]
-    I --> J[Display Progress Grid]
+    Note over AC,D: Different clients can process same filename
     
-    K[Monitoring Tool] --> L[GET /progress?filename=data.csv<br/>Specific file status]
-    L --> M[Real-time Progress Display]
+    AC->>A: POST /clients/krn:acme:client:123/progress<br/>{filename: "data.csv", ...}
+    A->>D: Create progress (client: ACME)
+    D-->>A: Success
+    A-->>AC: 200 Created
     
-    N[Report Generator] --> O[GET /progress?email=user\@company.com<br/>User's file history]
-    O --> P[Generate User Report]
+    WC->>A: POST /clients/krn:widgets:client:456/progress<br/>{filename: "data.csv", ...}
+    A->>D: Create progress (client: Widgets)
+    D-->>A: Success
+    A-->>WC: 200 Created
+    
+    Note over AC,D: Each client has isolated progress
+    
+    AC->>A: GET /clients/krn:acme:client:123/progress?filename=data.csv
+    A->>D: Find by clientKrn + filename
+    D-->>A: ACME's progress only
+    A-->>AC: 200 OK (ACME data)
+    
+    WC->>A: GET /clients/krn:widgets:client:456/progress?filename=data.csv
+    A->>D: Find by clientKrn + filename
+    D-->>A: Widgets' progress only
+    A-->>WC: 200 OK (Widgets data)
+```
+
+### Scenario: Mixed Channel Updates
+```mermaid
+sequenceDiagram
+    participant W as Worker
+    participant SQ as SQS
+    participant K as Kafka
+    participant SC as SQS Consumer
+    participant KC as Kafka Consumer
+    participant D as MongoDB
+    
+    Note over W,D: Same file updated via multiple channels
+    
+    W->>SQ: Send initial progress<br/>{clientKrn: "krn:acme:client:123",<br/>filename: "large-file.csv",<br/>counts: {done: 1000}}
+    
+    SQ-->>SC: Consume message
+    SC->>D: Create progress
+    
+    W->>K: Send update<br/>{clientKrn: "krn:acme:client:123",<br/>filename: "large-file.csv",<br/>counts: {done: 2000}}
+    
+    K-->>KC: Consume event
+    KC->>D: Update progress (accumulate)
+    
+    Note over W,D: Final state: done = 3000
 ```
 
 ## 🔧 Key API Behaviors

@@ -11,7 +11,17 @@
         org.clojure/tools.logging          {:mvn/version "1.3.0"}
         buddy/buddy-sign                   {:mvn/version "3.6.1-359"}
         buddy/buddy-auth                   {:mvn/version "3.0.323"}
-        com.github.sikt-no/clj-jwt         {:mvn/version "0.5.102"}}
+        com.github.sikt-no/clj-jwt         {:mvn/version "0.5.102"}
+        ;; AWS SDK for SQS
+        com.cognitect.aws/api              {:mvn/version "0.8.686"}
+        com.cognitect.aws/endpoints        {:mvn/version "1.1.12.718"}
+        com.cognitect.aws/sqs              {:mvn/version "870.2.1655.0"}
+        ;; Kafka client
+        org.apache.kafka/kafka-clients     {:mvn/version "3.7.0"}
+        ;; Core.async for concurrent processing
+        org.clojure/core.async             {:mvn/version "1.6.681"}
+        ;; JSON parsing
+        org.clojure/data.json              {:mvn/version "2.5.0"}}
  
  :aliases
  {:dev {:extra-deps {io.pedestal/pedestal.service-tools {:mvn/version "0.7.2"}}}
