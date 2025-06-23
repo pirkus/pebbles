@@ -1,9 +1,8 @@
 (ns pebbles.db-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [pebbles.db :as db]
-   [pebbles.test-utils :as test-utils]
-   [monger.collection :as mc]))
+   [pebbles.mock-db :as db]
+   [pebbles.test-utils :as test-utils]))
 
 (def test-db (atom nil))
 
@@ -27,8 +26,8 @@
                         :email email
                         :counts {:done 10 :warn 2 :failed 1}
                         :total 100}]
-      ;; Insert test data
-      (mc/insert @test-db "progress" progress-data)
+      ;; Insert test data directly using mock-db
+      (db/create-progress @test-db progress-data)
       
       ;; Find it
       (let [result (db/find-progress @test-db client-krn filename email)]
@@ -52,7 +51,7 @@
                         :email email
                         :counts {:done 10 :warn 2 :failed 1}}]
       ;; Insert test data for client-1
-      (mc/insert @test-db "progress" progress-data)
+      (db/create-progress @test-db progress-data)
       
       ;; Try to find with client-2
       (let [result (db/find-progress @test-db client-krn2 filename email)]
@@ -105,12 +104,12 @@
           email "test@example.com"
           filename "update.csv"
           ;; Create initial progress
-          _ (mc/insert @test-db "progress" 
-                      {:clientKrn client-krn
-                       :filename filename
-                       :email email
-                       :counts {:done 10 :warn 0 :failed 0}
-                       :isCompleted false})
+          _ (db/create-progress @test-db 
+                              {:clientKrn client-krn
+                               :filename filename
+                               :email email
+                               :counts {:done 10 :warn 0 :failed 0}
+                               :isCompleted false})
           ;; Update it
           update-doc {"$set" {:counts {:done 20 :warn 1 :failed 0}
                            :isCompleted true}}]
@@ -128,12 +127,12 @@
           email "test@example.com"
           other-email "other@example.com"]
       ;; Insert test data
-      (mc/insert @test-db "progress" 
-                {:clientKrn client-krn :filename "file1.csv" :email email :counts {:done 10 :warn 0 :failed 0}})
-      (mc/insert @test-db "progress" 
-                {:clientKrn client-krn :filename "file2.csv" :email email :counts {:done 20 :warn 1 :failed 0}})
-      (mc/insert @test-db "progress" 
-                {:clientKrn client-krn :filename "other-file.csv" :email other-email :counts {:done 5 :warn 0 :failed 0}})
+      (db/create-progress @test-db 
+                         {:clientKrn client-krn :filename "file1.csv" :email email :counts {:done 10 :warn 0 :failed 0}})
+      (db/create-progress @test-db 
+                         {:clientKrn client-krn :filename "file2.csv" :email email :counts {:done 20 :warn 1 :failed 0}})
+      (db/create-progress @test-db 
+                         {:clientKrn client-krn :filename "other-file.csv" :email other-email :counts {:done 5 :warn 0 :failed 0}})
       
       ;; Find user's progress
       (let [results (db/find-all-progress @test-db client-krn email)]
@@ -154,8 +153,8 @@
           email "creator@example.com"
           filename "test-file.csv"]
       ;; Insert test data
-      (mc/insert @test-db "progress" 
-                {:clientKrn client-krn :filename filename :email email :counts {:done 15 :warn 1 :failed 0}})
+      (db/create-progress @test-db 
+                         {:clientKrn client-krn :filename filename :email email :counts {:done 15 :warn 1 :failed 0}})
       
       ;; Find by filename only
       (let [result (db/find-progress-by-filename @test-db client-krn filename)]
@@ -174,12 +173,12 @@
     (let [client-krn1 "krn:clnt:client-1"
           client-krn2 "krn:clnt:client-2"]
       ;; Insert test data for different clients
-      (mc/insert @test-db "progress" 
-                {:clientKrn client-krn1 :filename "file1.csv" :email "user1@example.com" :counts {:done 10 :warn 0 :failed 0}})
-      (mc/insert @test-db "progress" 
-                {:clientKrn client-krn1 :filename "file2.csv" :email "user2@example.com" :counts {:done 20 :warn 1 :failed 0}})
-      (mc/insert @test-db "progress" 
-                {:clientKrn client-krn2 :filename "file3.csv" :email "user3@example.com" :counts {:done 5 :warn 0 :failed 0}})
+      (db/create-progress @test-db 
+                         {:clientKrn client-krn1 :filename "file1.csv" :email "user1@example.com" :counts {:done 10 :warn 0 :failed 0}})
+      (db/create-progress @test-db 
+                         {:clientKrn client-krn1 :filename "file2.csv" :email "user2@example.com" :counts {:done 20 :warn 1 :failed 0}})
+      (db/create-progress @test-db 
+                         {:clientKrn client-krn2 :filename "file3.csv" :email "user3@example.com" :counts {:done 5 :warn 0 :failed 0}})
       
       ;; Find client-1's progress
       (let [results (db/find-all-progress-by-client @test-db client-krn1)]

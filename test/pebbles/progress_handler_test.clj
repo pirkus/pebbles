@@ -1,9 +1,9 @@
 (ns pebbles.progress-handler-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [pebbles.system :as system]
+   [pebbles.test-handlers :as handlers]
    [pebbles.test-utils :as test-utils]
-   [pebbles.db :as db]))
+   [pebbles.mock-db :as db]))
 
 (def test-db (atom nil))
 
@@ -18,7 +18,7 @@
 (use-fixtures :each db-fixture)
 
 (deftest update-progress-handler-test
-  (let [handler (system/update-progress-handler @test-db)
+  (let [handler (handlers/update-progress-handler @test-db)
         client-krn "krn:clnt:test-client"
         email "test@example.com"
         identity {:email email}]
@@ -219,8 +219,8 @@
         (is (= [] (:warnings body)))))))
 
 (deftest get-progress-handler-test
-  (let [update-handler (system/update-progress-handler @test-db)
-        get-handler (system/get-progress-handler @test-db)
+  (let [update-handler (handlers/update-progress-handler @test-db)
+        get-handler (handlers/get-progress-handler @test-db)
         client-krn "krn:clnt:test-client"
         email "test@example.com"
         identity {:email email}]
@@ -299,8 +299,8 @@
         (is (= other-email (:email body))))))
   
   (testing "Multi-tenancy isolation"
-    (let [update-handler (system/update-progress-handler @test-db)
-          get-handler (system/get-progress-handler @test-db)
+    (let [update-handler (handlers/update-progress-handler @test-db)
+          get-handler (handlers/get-progress-handler @test-db)
           client-krn1 "krn:clnt:client-1"
           client-krn2 "krn:clnt:client-2"
           email "test@example.com"
@@ -338,7 +338,7 @@
 
 (deftest authorization-test
   (testing "Only original creator can update file progress"
-    (let [handler (system/update-progress-handler @test-db)
+    (let [handler (handlers/update-progress-handler @test-db)
           client-krn "krn:clnt:test-client"
           creator-email "creator@example.com"
           creator-identity {:email creator-email}

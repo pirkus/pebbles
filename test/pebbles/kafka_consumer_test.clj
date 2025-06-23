@@ -3,7 +3,7 @@
    [clojure.test :refer [deftest is testing use-fixtures]]
    [pebbles.kafka-consumer :as kafka]
    [pebbles.test-utils :as test-utils]
-   [pebbles.db :as db]))
+   [pebbles.mock-db :as db]))
 
 (def test-db (atom nil))
 

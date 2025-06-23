@@ -1,31 +1,19 @@
 (ns pebbles.test-utils
   (:require
-   [cheshire.core :as json]
-   [monger.core :as mg])
-  (:import
-   (org.testcontainers.containers MongoDBContainer)
-   (org.testcontainers.utility DockerImageName)))
+   [cheshire.core :as json]))
 
-(defn start-mongodb-container []
-  (let [container (MongoDBContainer. 
-                   (DockerImageName/parse "mongo:6.0"))]
-    (.start container)
-    container))
-
-(defn get-connection-string [container]
-  (.getReplicaSetUrl container))
+;; Simple in-memory database mock using atoms
+(defn create-mock-db []
+  (atom {}))
 
 (defn fresh-db []
-  (let [container (start-mongodb-container)
-        uri (get-connection-string container)
-        {:keys [conn db]} (mg/connect-via-uri uri)]
-    ;; Return a map with db and container reference for cleanup
-    {:db db :container container :conn conn}))
+  {:db (create-mock-db)
+   :conn nil
+   :mongo-instance nil})
 
 (defn cleanup-db [db-map]
-  (let [{:keys [container conn]} db-map]
-    (when conn (mg/disconnect conn))
-    (when container (.stop container))))
+  ;; Nothing to clean up for in-memory mock
+  nil)
 
 (defn make-test-request
   "Helper to create test requests with JSON params"
