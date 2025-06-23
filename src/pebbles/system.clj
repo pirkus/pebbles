@@ -15,7 +15,16 @@
    [pebbles.jwt :as jwt]
    [pebbles.specs :as specs]
    [pebbles.sqs-consumer :as sqs]
-   [pebbles.kafka-consumer :as kafka]))
+   [pebbles.kafka-consumer :as kafka])
+)
+
+;; Helper for environment variables
+(defn env [key]
+  (System/getenv (name key)))
+
+;; Helper for current timestamp
+(defn current-timestamp []
+  (.toString (java.time.Instant/now)))
 
 (def exception-handler
   (err/error-dispatch [context ex]
@@ -259,9 +268,9 @@
       
       sqs-enabled?
       (assoc :sqs-consumer (component/using
-                            (sqs/make-sqs-consumer
-                             {:queue-url (System/getenv "SQS_QUEUE_URL")
-                              :region (or (System/getenv "AWS_REGION") "us-east-1")})
+                            (sqs/sqs-consumer
+                             (System/getenv "SQS_QUEUE_URL")
+                             (or (System/getenv "AWS_REGION") "us-east-1"))
                             [:mongo]))
       
       kafka-enabled?

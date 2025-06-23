@@ -42,7 +42,8 @@
   [record-data]
   (and (s/valid? ::specs/clientKrn (:clientKrn record-data))
        (s/valid? ::specs/email (:email record-data))
-       (s/valid? ::specs/progress-update-params record-data)))
+       (s/valid? ::specs/filename (:filename record-data))
+       (s/valid? ::specs/counts (:counts record-data))))
 
 (defn process-progress-update
   "Process a progress update from Kafka record"
@@ -140,7 +141,7 @@
     (finally
       (.close consumer))))
 
-(defrecord KafkaConsumer [db config running? consumer-thread]
+(defrecord KafkaConsumerComponent [db config running? consumer-thread]
   component/Lifecycle
   (start [this]
     (if running?
@@ -169,4 +170,4 @@
 (defn make-kafka-consumer
   "Create Kafka consumer component"
   [config]
-  (map->KafkaConsumer {:config config}))
+  (map->KafkaConsumerComponent {:config config}))

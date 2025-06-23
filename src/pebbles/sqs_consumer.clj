@@ -1,169 +1,160 @@
 (ns pebbles.sqs-consumer
-  (:require
-   [clojure.core.async :as async]
-   [clojure.data.json :as json]
-   [clojure.spec.alpha :as s]
-   [clojure.tools.logging :as log]
-   [cognitect.aws.client.api :as aws]
-   [com.stuartsierra.component :as component]
-   [pebbles.db :as db]
-   [pebbles.specs :as specs]))
+  (:require [clojure.core.async :as async]
+            [clojure.data.json :as json]
+            [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s]
+            [com.stuartsierra.component :as component]
+            [pebbles.specs :as specs]
+            [pebbles.db :as db])
+  (:import [software.amazon.awssdk.services.sqs SqsClient]
+           [software.amazon.awssdk.services.sqs.model ReceiveMessageRequest DeleteMessageRequest]
+           [software.amazon.awssdk.regions Region]))
+
+(defn create-sqs-client
+  "Create an SQS client"
+  [region]
+  (-> (SqsClient/builder)
+      (.region (Region/of region))
+      (.build)))
 
 (defn parse-message
-  "Parse SQS message body to extract progress data"
+  "Parse SQS message body"
   [message]
   (try
-    (-> message
-        :Body
-        (json/read-str :key-fn keyword))
+    (json/read-str (.body message) :key-fn keyword)
     (catch Exception e
-      (log/error "Failed to parse SQS message:" e)
+      (log/error e "Failed to parse SQS message")
       nil)))
 
 (defn validate-message
-  "Validate SQS message contains required fields"
+  "Validate the message data has required fields"
   [message-data]
   (and (s/valid? ::specs/clientKrn (:clientKrn message-data))
        (s/valid? ::specs/email (:email message-data))
-       (s/valid? ::specs/progress-update-params message-data)))
+       (s/valid? ::specs/filename (:filename message-data))
+       (s/valid? ::specs/counts (:counts message-data))))
 
 (defn process-progress-update
-  "Process a progress update from SQS message"
+  "Process a progress update from message data - same logic as HTTP endpoint"
   [db message-data]
   (let [{:keys [clientKrn email filename counts total isLast errors warnings]} message-data
-        {:keys [done warn failed]} counts
-        now (.toString (java.time.Instant/now))
-        
-        ;; Find existing progress
-        any-existing (db/find-progress-by-filename db clientKrn filename)
         existing (db/find-progress db clientKrn filename email)]
     
     (cond
-      ;; Progress exists but user is not the creator
-      (and any-existing (not= email (:email any-existing)))
-      {:error "Only the original creator can update this file's progress"}
-      
-      ;; Progress already completed
+      ;; Check if already completed
       (and existing (:isCompleted existing))
       {:error "This file processing has already been completed"}
       
-      ;; No existing progress - create new
-      (nil? existing)
-      (let [new-progress {:clientKrn clientKrn
-                         :filename filename
-                         :email email
-                         :counts counts
-                         :total total
-                         :isCompleted (boolean isLast)
-                         :createdAt now
-                         :updatedAt now}
-            new-progress (cond-> new-progress
-                          errors (assoc :errors errors)
-                          warnings (assoc :warnings warnings))]
-        (db/create-progress db new-progress)
-        {:result "created" :progress new-progress})
+      ;; Check authorization
+      (and existing (not= email (:email existing)))
+      {:error "Only the original creator can update this file's progress"}
       
-      ;; Update existing progress
+      ;; Create or update
       :else
-      (let [new-counts {:done (+ (get-in existing [:counts :done] 0) done)
-                       :warn (+ (get-in existing [:counts :warn] 0) warn)
-                       :failed (+ (get-in existing [:counts :failed] 0) failed)}
-            all-errors (concat (or (:errors existing) []) (or errors []))
-            all-warnings (concat (or (:warnings existing) []) (or warnings []))
-            update-doc {"$set" {:counts new-counts
-                              :updatedAt now
-                              :isCompleted (boolean isLast)
-                              :errors all-errors
-                              :warnings all-warnings}}
-            update-doc (if (and total (nil? (:total existing)))
-                        (assoc-in update-doc ["$set" :total] total)
-                        update-doc)]
+      (let [timestamp (.toString (java.time.Instant/now))
+            new-counts (if existing
+                        (merge-with + (:counts existing) counts)
+                        counts)
+            doc (cond-> {:clientKrn clientKrn
+                        :filename filename
+                        :email email
+                        :counts new-counts
+                        :isCompleted (boolean isLast)}
+                  (not existing) (assoc :createdAt timestamp)
+                  total (assoc :total total)
+                  errors (assoc :errors (concat (or (:errors existing) []) errors))
+                  warnings (assoc :warnings (concat (or (:warnings existing) []) warnings)))]
         
-        (db/update-progress db clientKrn filename email update-doc)
-        {:result "updated"
-         :progress {:clientKrn clientKrn
-                   :filename filename
-                   :email email
-                   :counts new-counts
-                   :total (or total (:total existing))
-                   :isCompleted (boolean isLast)
-                   :errors all-errors
-                   :warnings all-warnings}}))))
+        (if existing
+          (do
+            (db/update-progress db clientKrn filename email
+                               {"$set" (dissoc doc :clientKrn :filename :email)})
+            {:result "updated" :progress doc})
+          (do
+            (db/create-progress db doc)
+            {:result "created" :progress doc}))))))
+
+(defn delete-message
+  "Delete a message from SQS after processing"
+  [sqs-client queue-url receipt-handle]
+  (try
+    (let [request (-> (DeleteMessageRequest/builder)
+                     (.queueUrl queue-url)
+                     (.receiptHandle receipt-handle)
+                     (.build))]
+      (.deleteMessage sqs-client request))
+    (catch Exception e
+      (log/error e "Failed to delete SQS message"))))
 
 (defn process-message
   "Process a single SQS message"
-  [db sqs queue-url message]
-  (if-let [message-data (parse-message message)]
-    (if (validate-message message-data)
+  [db sqs-client queue-url message]
+  (let [receipt-handle (.receiptHandle message)
+        message-data (parse-message message)]
+    
+    (if (and message-data (validate-message message-data))
+      (let [result (process-progress-update db message-data)]
+        (when-not (:error result)
+          (delete-message sqs-client queue-url receipt-handle))
+        result)
       (do
-        (log/info "Processing SQS message for" (:clientKrn message-data) "/" (:filename message-data))
-        (let [result (process-progress-update db message-data)]
-          (if (:error result)
-            (log/error "Failed to process message:" (:error result))
-            (do
-              (log/info "Successfully processed message:" (:result result))
-              ;; Delete message from queue on successful processing
-              (aws/invoke sqs {:op :DeleteMessage
-                             :request {:QueueUrl queue-url
-                                     :ReceiptHandle (:ReceiptHandle message)}})))
-          result))
-      (do
-        (log/error "Invalid message format:" message-data)
         ;; Delete invalid messages to prevent reprocessing
-        (aws/invoke sqs {:op :DeleteMessage
-                       :request {:QueueUrl queue-url
-                               :ReceiptHandle (:ReceiptHandle message)}})
-        {:error "Invalid message format"}))
-    {:error "Failed to parse message"}))
+        (delete-message sqs-client queue-url receipt-handle)
+        (if message-data
+          {:error "Invalid message format"}
+          {:error "Failed to parse message"})))))
 
 (defn poll-messages
-  "Poll SQS queue for messages"
-  [sqs queue-url]
+  "Poll messages from SQS queue"
+  [sqs-client queue-url]
   (try
-    (let [response (aws/invoke sqs {:op :ReceiveMessage
-                                  :request {:QueueUrl queue-url
-                                          :MaxNumberOfMessages 10
-                                          :WaitTimeSeconds 20}})]
-      (get response :Messages []))
+    (let [request (-> (ReceiveMessageRequest/builder)
+                     (.queueUrl queue-url)
+                     (.maxNumberOfMessages (int 10))
+                     (.waitTimeSeconds (int 20))  ; Long polling
+                     (.build))
+          response (.receiveMessage sqs-client request)]
+      (.messages response))
     (catch Exception e
-      (log/error "Failed to poll SQS:" e)
+      (log/error e "Failed to poll SQS messages")
       [])))
 
-(defrecord SqsConsumer [db queue-url region running? poll-chan]
+(defrecord SQSConsumerComponent [db queue-url region running]
   component/Lifecycle
   (start [this]
-    (if running?
+    (if running
       this
-      (let [sqs (aws/client {:api :sqs :region region})
-            chan (async/chan)
-            db-conn (:db db)]
+      (do
         (log/info "Starting SQS consumer for queue:" queue-url)
-        (async/go-loop []
-          (when-let [_ (async/<! (async/timeout 100))]
-            (when @running?
-              (try
-                (let [messages (poll-messages sqs queue-url)]
-                  (doseq [message messages]
-                    (process-message db-conn sqs queue-url message)))
-                (catch Exception e
-                  (log/error "Error in SQS consumer loop:" e)))
-              (recur))))
-        (assoc this 
-               :running? (atom true)
-               :poll-chan chan
-               :sqs sqs))))
+        (let [sqs-client (create-sqs-client region)
+              running-flag (atom true)
+              consumer-thread
+              (async/thread
+                (while @running-flag
+                  (try
+                    (let [messages (poll-messages sqs-client queue-url)]
+                      (doseq [message messages]
+                        (let [result (process-message db sqs-client queue-url message)]
+                          (if (:error result)
+                            (log/warn "Failed to process SQS message:" (:error result))
+                            (log/info "Processed SQS message:" (:result result))))))
+                    (catch Exception e
+                      (log/error e "Error in SQS consumer loop")))))]
+          (assoc this
+                 :running running-flag
+                 :sqs-client sqs-client
+                 :consumer-thread consumer-thread)))))
   
   (stop [this]
-    (when running?
-      (log/info "Stopping SQS consumer")
-      (reset! running? false)
-      (when poll-chan
-        (async/close! poll-chan)))
-    (assoc this :running? nil :poll-chan nil :sqs nil)))
+    (if-not running
+      this
+      (do
+        (log/info "Stopping SQS consumer")
+        (reset! running false)
+        (dissoc this :running :sqs-client :consumer-thread)))))
 
-(defn make-sqs-consumer
-  "Create SQS consumer component"
-  [{:keys [queue-url region]
-    :or {region "us-east-1"}}]
-  (map->SqsConsumer {:queue-url queue-url
-                     :region region}))
+(defn sqs-consumer
+  "Create an SQS consumer component"
+  [queue-url region]
+  (map->SQSConsumerComponent {:queue-url queue-url
+                             :region region}))

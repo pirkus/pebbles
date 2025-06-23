@@ -1,4 +1,4 @@
-{:paths ["src"]
+{:paths ["src" "resources"]
  :deps {org.clojure/clojure                {:mvn/version "1.11.2"}
         com.stuartsierra/component         {:mvn/version "1.1.0"}
         io.pedestal/pedestal.service       {:mvn/version "0.7.2"}
@@ -12,10 +12,8 @@
         buddy/buddy-sign                   {:mvn/version "3.6.1-359"}
         buddy/buddy-auth                   {:mvn/version "3.0.323"}
         com.github.sikt-no/clj-jwt         {:mvn/version "0.5.102"}
-        ;; AWS SDK for SQS
-        com.cognitect.aws/api              {:mvn/version "0.8.686"}
-        com.cognitect.aws/endpoints        {:mvn/version "1.1.12.718"}
-        com.cognitect.aws/sqs              {:mvn/version "870.2.1655.0"}
+        ;; AWS SDK for SQS (v2)
+        software.amazon.awssdk/sqs         {:mvn/version "2.25.0"}
         ;; Kafka client
         org.apache.kafka/kafka-clients     {:mvn/version "3.7.0"}
         ;; Core.async for concurrent processing
@@ -24,11 +22,13 @@
         org.clojure/data.json              {:mvn/version "2.5.0"}}
  
  :aliases
- {:dev {:extra-deps {io.pedestal/pedestal.service-tools {:mvn/version "0.7.2"}}}
+ {:dev {:extra-paths ["dev"]
+        :extra-deps {io.pedestal/pedestal.service-tools {:mvn/version "0.7.2"}}}
   :test {:extra-paths ["test" "test-resources"]
          :extra-deps {org.testcontainers/testcontainers {:mvn/version "1.19.7"}
                       org.testcontainers/mongodb {:mvn/version "1.19.7"}
                       io.github.cognitect-labs/test-runner
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
-         :main-opts ["-m" "cognitect.test-runner"]
-         :exec-fn cognitect.test-runner.api/test}}}
+         :main-opts ["-m" "cognitect.test-runner"
+                     "-d" "test"]}
+  :run {:main-opts ["-m" "pebbles.system"]}}}

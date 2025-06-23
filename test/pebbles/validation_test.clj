@@ -5,6 +5,18 @@
    [pebbles.system :as system]
    [pebbles.specs :as specs]))
 
+(deftest clientKrn-spec-test
+  (testing "Valid clientKrn"
+    (is (s/valid? ::specs/clientKrn "krn:clnt:this-is-opaque-to-us"))
+    (is (s/valid? ::specs/clientKrn "krn:clnt:another-opaque-id"))
+    (is (s/valid? ::specs/clientKrn "krn:clnt:test-client-123")))
+  
+  (testing "Invalid clientKrn"
+    ;; Must be a string
+    (is (not (s/valid? ::specs/clientKrn 123)))
+    (is (not (s/valid? ::specs/clientKrn nil)))
+    (is (not (s/valid? ::specs/clientKrn :keyword)))))
+
 (deftest progress-update-specs-test
   (testing "Valid progress update params"
     (is (s/valid? ::specs/progress-update-params

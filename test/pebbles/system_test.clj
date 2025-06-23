@@ -5,7 +5,9 @@
    [pebbles.specs :as specs]
    [clojure.spec.alpha :as s])
   (:import
-   [pebbles.system MongoComponent HttpComponent]))
+   [pebbles.system MongoComponent HttpComponent]
+   [pebbles.sqs_consumer SQSConsumerComponent]
+   [pebbles.kafka_consumer KafkaConsumerComponent]))
 
 (deftest health-handler-test
   (testing "Health endpoint returns OK"
@@ -38,7 +40,25 @@
       (is (contains? sys :mongo))
       (is (contains? sys :http))
       (is (instance? MongoComponent (:mongo sys)))
-      (is (instance? HttpComponent (:http sys))))))
+      (is (instance? HttpComponent (:http sys)))))
+  
+  (testing "System components with SQS enabled"
+    (with-redefs [system/env (fn [k] (when (= k :sqs-enabled) "true"))]
+      (let [sys (system/system)]
+        (is (contains? sys :sqs-consumer))
+        (is (instance? SQSConsumerComponent (:sqs-consumer sys))))))
+  
+  (testing "System components with Kafka enabled"
+    (with-redefs [system/env (fn [k] (when (= k :kafka-enabled) "true"))]
+      (let [sys (system/system)]
+        (is (contains? sys :kafka-consumer))
+        (is (instance? KafkaConsumerComponent (:kafka-consumer sys))))))
+  
+  (testing "System components with both consumers disabled"
+    (with-redefs [system/env (fn [k] nil)]
+      (let [sys (system/system)]
+        (is (not (contains? sys :sqs-consumer)))
+        (is (not (contains? sys :kafka-consumer)))))))
 
 (deftest route-expansion-test
   (testing "Routes can be expanded without errors"
