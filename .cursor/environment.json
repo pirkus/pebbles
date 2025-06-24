@@ -33,6 +33,8 @@
         "MONGO_URI": "mongodb://localhost:27017/test"
       },
       "commands": [
+        "export USE_EXISTING_MONGO=true",
+        "export MONGO_URI=mongodb://localhost:27017/test",
         "clojure -X:test"
       ]
     },
