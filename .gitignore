@@ -21,3 +21,8 @@ Thumbs.db
 # Test reports
 target/
 test-results/
+
+# Environment setup
+.env.test
+.setup-status
+/tmp/dockerd.pid
