@@ -3,14 +3,17 @@
    [monger.collection :as mc]))
 
 (defn find-progress
-  "Find progress document by filename and email"
-  [db filename email]
-  (mc/find-one-as-map db "progress" {:filename filename :email email}))
+  "Find progress document by clientKrn, filename and email"
+  [db client-krn filename email]
+  (mc/find-one-as-map db "progress" {:clientKrn client-krn
+                                     :filename filename 
+                                     :email email}))
 
 (defn find-progress-by-filename
-  "Find progress document by filename only (used for authorization checks)"
-  [db filename]
-  (mc/find-one-as-map db "progress" {:filename filename}))
+  "Find progress document by clientKrn and filename only (used for authorization checks)"
+  [db client-krn filename]
+  (mc/find-one-as-map db "progress" {:clientKrn client-krn 
+                                     :filename filename}))
 
 (defn create-progress
   "Create a new progress document"
@@ -19,12 +22,20 @@
 
 (defn update-progress
   "Update existing progress document with new counts"
-  [db filename email update-data]
+  [db client-krn filename email update-data]
   (mc/update db "progress" 
-             {:filename filename :email email}
+             {:clientKrn client-krn
+              :filename filename 
+              :email email}
              update-data))
 
 (defn find-all-progress
-  "Find all progress documents for a user"
-  [db email]
-  (mc/find-maps db "progress" {:email email}))
+  "Find all progress documents for a user within a client"
+  [db client-krn email]
+  (mc/find-maps db "progress" {:clientKrn client-krn 
+                               :email email}))
+
+(defn find-all-progress-for-client
+  "Find all progress documents for a client"
+  [db client-krn]
+  (mc/find-maps db "progress" {:clientKrn client-krn}))

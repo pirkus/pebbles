@@ -8,18 +8,21 @@
 (deftest progress-update-specs-test
   (testing "Valid progress update params"
     (is (s/valid? ::specs/progress-update-params
-                  {:filename "test.csv"
+                  {:clientKrn "krn:clnt:test-client"
+                   :filename "test.csv"
                    :counts {:done 10 :warn 2 :failed 1}}))
     
     (is (s/valid? ::specs/progress-update-params
-                  {:filename "test.csv"
+                  {:clientKrn "krn:clnt:test-client"
+                   :filename "test.csv"
                    :counts {:done 0 :warn 0 :failed 0}
                    :total 100
                    :isLast true}))
     
     ;; With errors and warnings
     (is (s/valid? ::specs/progress-update-params
-                  {:filename "test.csv"
+                  {:clientKrn "krn:clnt:test-client"
+                   :filename "test.csv"
                    :counts {:done 10 :warn 2 :failed 1}
                    :errors [{:line 10 :message "Error on line 10"}
                            {:line 25 :message "Another error"}]
@@ -84,7 +87,8 @@
   (let [interceptor (system/validate-progress-update)]
     
     (testing "Valid request passes through"
-      (let [context {:request {:json-params {:filename "test.csv"
+      (let [context {:request {:json-params {:clientKrn "krn:clnt:test-client"
+                                            :filename "test.csv"
                                             :counts {:done 10 :warn 2 :failed 1}}}}
             result ((:enter interceptor) context)]
         (is (nil? (:response result)))
@@ -96,3 +100,28 @@
             result ((:enter interceptor) context)]
         (is (= 400 (get-in result [:response :status])))
         (is (re-find #"Invalid parameters" (get-in result [:response :body])))))))
+
+(deftest client-krn-validation-test
+  (testing "Valid client KRN formats (any string)"
+    (is (s/valid? ::specs/client-krn "krn:clnt:abc123"))
+    (is (s/valid? ::specs/client-krn "krn:clnt:some-opaque-string"))
+    (is (s/valid? ::specs/client-krn "krn:clnt:client-with-dashes"))
+    (is (s/valid? ::specs/client-krn "krn:clnt:client_with_underscores"))
+    (is (s/valid? ::specs/client-krn "krn:clnt:123456789"))
+    (is (s/valid? ::specs/client-krn "any-string"))
+    (is (s/valid? ::specs/client-krn "client-123")))
+  
+  (testing "Invalid client KRN formats"
+    (is (not (s/valid? ::specs/client-krn nil))) ; nil not allowed
+    (is (not (s/valid? ::specs/client-krn 123)))) ; must be string
+  
+  (testing "Progress update with client KRN"
+    (is (s/valid? ::specs/progress-update-params
+                  {:clientKrn "krn:clnt:test-client"
+                   :filename "test.csv"
+                   :counts {:done 10 :warn 2 :failed 1}}))
+    
+    (is (s/valid? ::specs/progress-update-params
+                  {:clientKrn "any-client-string"
+                   :filename "test.csv"
+                   :counts {:done 10 :warn 2 :failed 1}}))))

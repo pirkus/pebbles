@@ -29,10 +29,11 @@
 
 (defn make-test-request
   "Helper to create test requests with JSON params"
-  [params & {:keys [identity headers] :or {headers {}}}]
+  [params & {:keys [identity headers path-params] :or {headers {}}}]
   (cond-> {:json-params params
            :headers headers}
-    identity (assoc :identity identity)))
+    identity (assoc :identity identity)
+    path-params (assoc :path-params path-params)))
 
 (defn parse-json-response [response]
   (when-let [body (:body response)]

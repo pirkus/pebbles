@@ -1,0 +1,54 @@
+{
+  "name": "Pebbles Development Environment",
+  "description": "Development environment for the Pebbles project with MongoDB",
+  "tasks": {
+    "setup": {
+      "description": "Start MongoDB and setup the development environment",
+      "commands": [
+        "docker-compose up -d mongodb",
+        "echo 'MongoDB started on port 27017'",
+        "echo 'Database: pebbles'",
+        "echo 'Ready for development!'"
+      ]
+    },
+    "test": {
+      "description": "Run the test suite",
+      "commands": [
+        "clojure -X:test"
+      ]
+    },
+    "dev": {
+      "description": "Start the development server",
+      "commands": [
+        "clojure -M:run"
+      ]
+    },
+    "cleanup": {
+      "description": "Stop MongoDB and cleanup",
+      "commands": [
+        "docker-compose down",
+        "echo 'MongoDB stopped and cleaned up'"
+      ]
+    }
+  },
+  "backgroundServices": {
+    "mongodb": {
+      "description": "MongoDB database service",
+      "startCommand": "docker-compose up -d mongodb",
+      "stopCommand": "docker-compose down",
+      "healthCheck": {
+        "type": "port",
+        "port": 27017,
+        "timeout": 30
+      }
+    }
+  },
+  "environmentVariables": {
+    "MONGO_URI": "mongodb://localhost:27017/pebbles",
+    "PORT": "8081"
+  },
+  "ports": {
+    "mongodb": 27017,
+    "application": 8081
+  }
+} 

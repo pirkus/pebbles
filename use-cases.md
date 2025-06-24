@@ -2,46 +2,48 @@
 
 ## API Endpoints Overview
 
-| Method | Endpoint | Authentication | Purpose |
-|--------|----------|----------------|---------|
-| `POST` | `/progress` | ✅ Required (JWT) | Create/Update progress |
-| `GET` | `/progress` | ❌ Public | View progress data |
-| `GET` | `/health` | ❌ Public | Health check |
+| Method | Endpoint | Authentication | Client KRN Required | Purpose |
+|--------|----------|----------------|---------------------|---------|
+| `POST` | `/progress` | ✅ Required (JWT) | ✅ Yes (in body) | Create/Update progress within client |
+| `GET` | `/progress` | ❌ Public | ✅ Yes (query param) | View progress data within client |
+| `GET` | `/health` | ❌ Public | ❌ No | Health check |
 
 ---
 
 ## 🔄 Use Case Diagrams
 
-### Main Flow Diagram
+### Multitenant Flow Diagram
 ```mermaid
 graph TD
-    A[File Processing Client] --> B{Authentication Required?}
-    B -->|Yes - POST| C[JWT Token Required]
-    B -->|No - GET| D[Public Access]
+    A[File Processing Client] --> B{Client KRN Provided?}
+    B -->|No| Z[400 Bad Request]
+    B -->|Yes| C{Authentication Required?}
+    C -->|Yes - POST| D[JWT Token Required]
+    C -->|No - GET| E[Public Access with clientKrn]
     
-    C --> E[Create/Update Progress]
-    E --> F{Progress Exists?}
-    F -->|No| G[Create New Progress]
-    F -->|Yes| H{Same User?}
-    H -->|Yes| I{Completed?}
-    H -->|No| J[403 Forbidden]
-    I -->|No| K[Update Progress]
-    I -->|Yes| L[400 Bad Request]
+    D --> F[Create/Update Progress]
+    F --> G{Progress Exists in Client?}
+    G -->|No| H[Create New Progress]
+    G -->|Yes| I{Same User & Client?}
+    I -->|No| J[403 Forbidden]
+    I -->|Yes| K{Completed?}
+    K -->|No| L[Update Progress]
+    K -->|Yes| M[400 Bad Request]
     
-    D --> M[View Progress]
-    M --> N{Query Type?}
-    N -->|No params| O[All Progress Records]
-    N -->|filename param| P[Specific File Progress]
-    N -->|email param| Q[User's All Progress]
+    E --> N[View Progress within Client]
+    N --> O{Query Type?}
+    O -->|No params| P[All Progress Records for Client]
+    O -->|filename param| Q[Specific File Progress in Client]
+    O -->|email param| R[User's All Progress in Client]
     
-    G --> R[Return Created Response]
-    K --> S[Return Updated Response]
-    O --> T[Return All Records]
-    P --> U[Return File Progress]
-    Q --> V[Return User Progress]
+    H --> S[Return Created Response]
+    L --> T[Return Updated Response]
+    P --> U[Return Client Records]
+    Q --> V[Return File Progress]
+    R --> W[Return User Progress]
 ```
 
-### File Processing Workflow
+### Multitenant File Processing Workflow
 ```mermaid
 sequenceDiagram
     participant C as Client App
@@ -49,37 +51,80 @@ sequenceDiagram
     participant D as MongoDB
     participant J as JWT Provider
     
-    Note over C,D: File Processing Workflow
+    Note over C,D: Multitenant File Processing Workflow
     
     C->>J: Get JWT Token
     J-->>C: Return JWT
     
-    C->>A: POST /progress (with JWT)<br/>Initial batch progress
-    A->>A: Validate JWT & params
-    A->>D: Create progress document
+    C->>A: POST /progress (with JWT + clientKrn)<br/>Initial batch progress
+    A->>A: Validate JWT, clientKrn & params
+    A->>D: Create progress document with clientKrn
     D-->>A: Document created
-    A-->>C: 200 Created response
+    A-->>C: 200 Created response (with clientKrn)
     
     loop Processing batches
-        C->>A: POST /progress (with JWT)<br/>Update with new counts
-        A->>A: Validate JWT & authorization
-        A->>D: Update progress (add counts)
+        C->>A: POST /progress (with JWT + clientKrn)<br/>Update with new counts
+        A->>A: Validate JWT, clientKrn & authorization
+        A->>D: Update progress within client scope
         D-->>A: Document updated
         A-->>C: 200 Updated response
     end
     
-    C->>A: POST /progress (with JWT)<br/>Final batch (isLast: true)
-    A->>A: Validate JWT & authorization
-    A->>D: Update progress (mark completed)
+    C->>A: POST /progress (with JWT + clientKrn)<br/>Final batch (isLast: true)
+    A->>A: Validate JWT, clientKrn & authorization
+    A->>D: Update progress (mark completed) within client
     D-->>A: Document updated
     A-->>C: 200 Updated response (completed)
     
-    Note over C,D: Public Progress Viewing
+    Note over C,D: Public Progress Viewing (Client-Scoped)
     
-    C->>A: GET /progress?filename=data.csv
-    A->>D: Find progress by filename
-    D-->>A: Return progress document
+    C->>A: GET /progress?clientKrn=client1&filename=data.csv
+    A->>A: Validate clientKrn parameter
+    A->>D: Find progress by clientKrn + filename
+    D-->>A: Return progress document (if in client)
     A-->>C: 200 Progress data
+    
+    Note over C,D: Data Isolation Between Clients
+    
+    C->>A: GET /progress?clientKrn=client2&filename=data.csv
+    A->>A: Validate clientKrn parameter
+    A->>D: Find progress by clientKrn + filename
+    D-->>A: No document found (different client)
+    A-->>C: 404 Not Found
+```
+
+### Multi-Client Data Isolation
+```mermaid
+graph LR
+    subgraph "Client A (krn:clnt:company-a)"
+        A1[file1.csv - userA]
+        A2[file2.csv - userB]
+        A3[data.csv - userA]
+    end
+    
+    subgraph "Client B (krn:clnt:company-b)"
+        B1[file1.csv - userC]
+        B2[file3.csv - userD]
+        B3[data.csv - userC]
+    end
+    
+    subgraph "Client C (krn:clnt:company-c)"
+        C1[file4.csv - userE]
+        C2[data.csv - userF]
+    end
+    
+    A1 -.->|Complete Isolation| B1
+    A3 -.->|Same filename, different client| B3
+    A3 -.->|Same filename, different client| C2
+    
+    style A1 fill:#e1f5fe
+    style A2 fill:#e1f5fe
+    style A3 fill:#e1f5fe
+    style B1 fill:#f3e5f5
+    style B2 fill:#f3e5f5
+    style B3 fill:#f3e5f5
+    style C1 fill:#e8f5e8
+    style C2 fill:#e8f5e8
 ```
 
 ---
@@ -95,6 +140,7 @@ Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
 Content-Type: application/json
 
 {
+  "clientKrn": "krn:clnt:my-company",
   "filename": "customer-data.csv",
   "counts": {
     "done": 100,
@@ -125,6 +171,7 @@ Content-Type: application/json
 ```json
 {
   "result": "created",
+  "clientKrn": "krn:clnt:my-company",
   "filename": "customer-data.csv",
   "counts": {
     "done": 100,
@@ -163,6 +210,7 @@ Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
 Content-Type: application/json
 
 {
+  "clientKrn": "krn:clnt:my-company",
   "filename": "customer-data.csv",
   "counts": {
     "done": 200,
@@ -188,6 +236,7 @@ Content-Type: application/json
 ```json
 {
   "result": "updated",
+  "clientKrn": "krn:clnt:my-company",
   "filename": "customer-data.csv",
   "counts": {
     "done": 300,
@@ -225,76 +274,49 @@ Content-Type: application/json
 
 ---
 
-### 3. COMPLETE Processing (POST /progress)
-
-#### Request
+### 3. GET Progress by Client + Filename
 ```http
-POST /progress
-Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
-Content-Type: application/json
-
-{
-  "filename": "customer-data.csv",
-  "counts": {
-    "done": 695,
-    "warn": 2,
-    "failed": 5
-  },
-  "isLast": true
-}
-```
-
-#### Response (200 Completed)
-```json
-{
-  "result": "updated",
-  "filename": "customer-data.csv",
-  "counts": {
-    "done": 995,
-    "warn": 10,
-    "failed": 8
-  },
-  "total": 1000,
-  "isCompleted": true,
-  "errors": [...],
-  "warnings": [...]
-}
-```
-
----
-
-### 4. GET Specific File Progress (GET /progress)
-
-#### Request
-```http
-GET /progress?filename=customer-data.csv
+GET /progress?clientKrn=krn:clnt:my-company&filename=customer-data.csv
 ```
 
 #### Response (200 OK)
 ```json
 {
   "id": "507f1f77bcf86cd799439011",
+  "clientKrn": "krn:clnt:my-company",
   "filename": "customer-data.csv",
-  "email": "data-team@company.com",
+  "email": "user@company.com",
   "counts": {
-    "done": 995,
-    "warn": 10,
-    "failed": 8
+    "done": 300,
+    "warn": 8,
+    "failed": 3
   },
   "total": 1000,
-  "isCompleted": true,
-  "createdAt": "2024-12-19T14:00:00.000Z",
-  "updatedAt": "2024-12-19T17:45:30.789Z",
+  "isCompleted": false,
+  "createdAt": "2024-01-15T10:00:00Z",
+  "updatedAt": "2024-01-15T10:15:00Z",
   "errors": [
     {
       "line": 15,
       "message": "Invalid email format in customer record"
+    },
+    {
+      "line": 42,
+      "message": "Missing required field: phone_number"
+    },
+    {
+      "line": 156,
+      "message": "Duplicate customer ID detected"
     }
   ],
   "warnings": [
     {
       "line": 8,
       "message": "Deprecated field 'fax' still in use"
+    },
+    {
+      "line": 134,
+      "message": "Address format differs from standard"
     }
   ]
 }
@@ -302,11 +324,9 @@ GET /progress?filename=customer-data.csv
 
 ---
 
-### 5. GET All Progress for User (GET /progress)
-
-#### Request
+### 4. GET All Progress for Client
 ```http
-GET /progress?email=data-team@company.com
+GET /progress?clientKrn=krn:clnt:my-company
 ```
 
 #### Response (200 OK)
@@ -314,34 +334,38 @@ GET /progress?email=data-team@company.com
 [
   {
     "id": "507f1f77bcf86cd799439011",
+    "clientKrn": "krn:clnt:my-company",
     "filename": "customer-data.csv",
-    "email": "data-team@company.com",
-    "counts": {"done": 995, "warn": 10, "failed": 8},
+    "email": "user@company.com",
+    "counts": { "done": 300, "warn": 8, "failed": 3 },
     "total": 1000,
-    "isCompleted": true,
-    "createdAt": "2024-12-19T14:00:00.000Z",
-    "updatedAt": "2024-12-19T17:45:30.789Z"
+    "isCompleted": false,
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:15:00Z",
+    "errors": [...],
+    "warnings": [...]
   },
   {
     "id": "507f1f77bcf86cd799439012",
-    "filename": "inventory-update.csv",
-    "email": "data-team@company.com",
-    "counts": {"done": 450, "warn": 2, "failed": 1},
-    "total": 500,
-    "isCompleted": false,
-    "createdAt": "2024-12-19T16:30:00.000Z",
-    "updatedAt": "2024-12-19T17:00:15.456Z"
+    "clientKrn": "krn:clnt:my-company",
+    "filename": "sales-data.csv",
+    "email": "admin@company.com",
+    "counts": { "done": 5000, "warn": 0, "failed": 0 },
+    "total": 5000,
+    "isCompleted": true,
+    "createdAt": "2024-01-15T09:00:00Z",
+    "updatedAt": "2024-01-15T09:30:00Z",
+    "errors": [],
+    "warnings": []
   }
 ]
 ```
 
 ---
 
-### 6. GET All Progress (No params) (GET /progress)
-
-#### Request
+### 5. GET User Progress within Client
 ```http
-GET /progress
+GET /progress?clientKrn=krn:clnt:my-company&email=user@company.com
 ```
 
 #### Response (200 OK)
@@ -349,351 +373,312 @@ GET /progress
 [
   {
     "id": "507f1f77bcf86cd799439011",
+    "clientKrn": "krn:clnt:my-company",
     "filename": "customer-data.csv",
-    "email": "data-team@company.com",
-    "counts": {"done": 995, "warn": 10, "failed": 8},
-    "isCompleted": true,
-    "createdAt": "2024-12-19T14:00:00.000Z",
-    "updatedAt": "2024-12-19T17:45:30.789Z"
-  },
-  {
-    "id": "507f1f77bcf86cd799439013",
-    "filename": "sales-report.csv",
-    "email": "analyst@company.com",
-    "counts": {"done": 1200, "warn": 15, "failed": 3},
+    "email": "user@company.com",
+    "counts": { "done": 300, "warn": 8, "failed": 3 },
+    "total": 1000,
     "isCompleted": false,
-    "createdAt": "2024-12-19T15:00:00.000Z",
-    "updatedAt": "2024-12-19T17:30:22.123Z"
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:15:00Z",
+    "errors": [...],
+    "warnings": [...]
   }
 ]
 ```
 
 ---
 
-## ⚠️ Error Responses
+## 🎯 Detailed Use Cases
 
-### Authentication Required (401)
-```json
-{
-  "error": "Missing Authorization header"
-}
+### Use Case 1: Simple Multitenant Processing
+
+**Scenario**: Company A processes a sales file while Company B processes a different file
+
+**Company A Workflow:**
+```bash
+# Company A starts processing
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer JWT_A" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "sales_q1_2024.csv",
+    "counts": {"done": 1000, "warn": 0, "failed": 0},
+    "total": 10000
+  }'
+
+# Company A updates progress
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer JWT_A" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "sales_q1_2024.csv",
+    "counts": {"done": 2000, "warn": 5, "failed": 2}
+  }'
+
+# Company A checks their progress
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-a&filename=sales_q1_2024.csv"
 ```
 
-### Authorization Failed (403)
-```json
-{
-  "error": "Only the original creator can update this file's progress"
-}
+**Company B Workflow (Parallel, Isolated):**
+```bash
+# Company B starts processing (same filename, different client)
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer JWT_B" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-b",
+    "filename": "sales_q1_2024.csv",
+    "counts": {"done": 500, "warn": 1, "failed": 0},
+    "total": 5000
+  }'
+
+# Company B checks their progress (completely separate from Company A)
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-b&filename=sales_q1_2024.csv"
 ```
 
-### Validation Error (400)
-```json
-{
-  "error": "Invalid parameters: counts.done must be >= 0"
-}
-```
+**Key Points:**
+- Same filename, different clients = completely isolated
+- Each company only sees their own data
+- No cross-contamination between tenants
 
-### File Not Found (404)
-```json
-{
-  "error": "Progress not found for this file"
-}
-```
+---
 
-### Already Completed (400)
-```json
-{
-  "error": "This file processing has already been completed"
-}
+### Use Case 2: Error Handling and Authorization
+
+**Scenario**: Demonstrating access control within and across clients
+
+```bash
+# User Alice in Company A creates progress
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer ALICE_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "confidential_data.csv",
+    "counts": {"done": 100, "warn": 0, "failed": 0}
+  }'
+
+# User Bob in Company A tries to update Alice's file (FORBIDDEN)
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer BOB_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "confidential_data.csv",
+    "counts": {"done": 50, "warn": 0, "failed": 0}
+  }'
+# Response: 403 Forbidden
+
+# User Carol in Company B tries to access Company A's file (NOT FOUND)
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-b&filename=confidential_data.csv"
+# Response: 404 Not Found
+
+# Missing clientKrn (BAD REQUEST)
+curl -X GET "http://localhost:8081/progress?filename=confidential_data.csv"
+# Response: 400 Bad Request
 ```
 
 ---
 
-## 🎯 Common Use Case Scenarios
+### Use Case 3: Streaming Processing with Multiple Clients
 
-```mermaid
-graph LR
-    A[Data Processing App] --> B[Batch 1<br/>100 records]
-    B --> C[POST /progress<br/>counts: done=95, warn=3, failed=2]
-    C --> D[Batch 2<br/>200 records]
-    D --> E[POST /progress<br/>counts: done=185, warn=10, failed=5]
-    E --> F[Batch 3<br/>150 records - Final]
-    F --> G[POST /progress<br/>counts: done=145, warn=2, failed=3<br/>isLast: true]
-    
-    H[Dashboard App] --> I[GET /progress<br/>All files overview]
-    I --> J[Display Progress Grid]
-    
-    K[Monitoring Tool] --> L[GET /progress?filename=data.csv<br/>Specific file status]
-    L --> M[Real-time Progress Display]
-    
-    N[Report Generator] --> O[GET /progress?email=user\@company.com<br/>User's file history]
-    O --> P[Generate User Report]
+**Scenario**: Two companies process large files with unknown totals
+
+**Company A - Discovers total during processing:**
+```bash
+# Start without total
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer JWT_A" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "large_dataset_a.csv",
+    "counts": {"done": 1000, "warn": 10, "failed": 5}
+  }'
+
+# Add total when discovered
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer JWT_A" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "large_dataset_a.csv",
+    "counts": {"done": 2500, "warn": 15, "failed": 8},
+    "total": 50000
+  }'
 ```
 
-## 🔧 Key API Behaviors
-
-| Behavior | Description | Example |
-|----------|-------------|---------|
-| **Cumulative Counts** | Progress counts are **added** to existing values | `done: 100` + `done: 50` = `done: 150` |
-| **Append Errors/Warnings** | New errors/warnings are **appended** to existing arrays | Array grows with each update |
-| **Creator Authorization** | Only the original creator can update a file's progress | Based on JWT email |
-| **Completion Lock** | Once `isLast: true`, no further updates allowed | Prevents accidental overwrites |
-| **Public Read Access** | Anyone can view progress without authentication | Transparency for monitoring |
-| **Server Timestamps** | `createdAt`/`updatedAt` always set by server | Client cannot override |
-
-## 📊 Response Codes Summary
-
-| Code | Scenario | When |
-|------|----------|------|
-| **200** | Success (Update/Get) | Progress updated or retrieved |
-| **400** | Bad Request | Invalid data, already completed, etc. |
-| **401** | Unauthorized | Missing/invalid JWT token |
-| **403** | Forbidden | Wrong user trying to update |
-| **404** | Not Found | Progress doesn't exist |
-| **500** | Server Error | Database or internal errors |
+**Company B - Parallel processing:**
+```bash
+# Different client, different approach
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer JWT_B" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-b",
+    "filename": "large_dataset_b.csv",
+    "counts": {"done": 5000, "warn": 0, "failed": 0},
+    "total": 100000
+  }'
+```
 
 ---
 
-## 📋 Detailed Sequence Diagrams
+### Use Case 4: Multi-User Team Processing within Client
 
-### Scenario 1: Clean Processing with Total
-```mermaid
-sequenceDiagram
-    participant U1 as Data Processor<br/>(user@company.com)
-    participant U2 as Monitor<br/>(public viewer)
-    participant A as API Server
-    participant D as MongoDB
-    participant J as JWT Service
-    
-    Note over U1,D: Scenario 1: Clean Processing with Total
-    
-    U1->>J: Request JWT Token
-    J-->>U1: eyJhbGciOiJSUzI1NiI...
-    
-    U1->>A: POST /progress<br/>{filename: "sales-data.csv",<br/>counts: {done: 500, warn: 0, failed: 0},<br/>total: 2000}
-    A->>A: Validate JWT & params
-    A->>D: Create progress document
-    D-->>A: Document created with _id
-    A-->>U1: 200 OK<br/>{result: "created", filename: "sales-data.csv",<br/>counts: {done: 500, warn: 0, failed: 0},<br/>total: 2000, isCompleted: false}
-    
-    Note over U1,D: Processing continues...
-    
-    U1->>A: POST /progress<br/>{filename: "sales-data.csv",<br/>counts: {done: 750, warn: 2, failed: 1}}
-    A->>A: Validate JWT & authorization
-    A->>D: Update progress (add counts)
-    D-->>A: Document updated
-    A-->>U1: 200 OK<br/>{result: "updated", filename: "sales-data.csv",<br/>counts: {done: 1250, warn: 2, failed: 1},<br/>total: 2000, isCompleted: false}
-    
-    U1->>A: POST /progress<br/>{filename: "sales-data.csv",<br/>counts: {done: 748, warn: 1, failed: 0},<br/>isLast: true}
-    A->>A: Validate JWT & authorization
-    A->>D: Update progress (mark completed)
-    D-->>A: Document updated
-    A-->>U1: 200 OK<br/>{result: "updated", filename: "sales-data.csv",<br/>counts: {done: 1998, warn: 3, failed: 1},<br/>total: 2000, isCompleted: true}
-    
-    Note over U1,D: Monitor checks progress
-    
-    U2->>A: GET /progress?filename=sales-data.csv
-    A->>D: Find progress by filename
-    D-->>A: Return complete progress document
-    A-->>U2: 200 OK<br/>{id: "...", filename: "sales-data.csv",<br/>email: "user@company.com",<br/>counts: {done: 1998, warn: 3, failed: 1},<br/>total: 2000, isCompleted: true,<br/>createdAt: "2024-12-19T14:00:00Z",<br/>updatedAt: "2024-12-19T14:45:30Z"}
+**Scenario**: Team at Company A collaborates on different files
+
+```bash
+# Team Lead starts file A
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer LEAD_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "project_alpha.csv",
+    "counts": {"done": 1000, "warn": 0, "failed": 0}
+  }'
+
+# Developer 1 starts file B
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer DEV1_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "project_beta.csv",
+    "counts": {"done": 500, "warn": 2, "failed": 1}
+  }'
+
+# Manager views all team progress within their client
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-a"
+
+# Manager views specific team member's work
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-a&email=dev1@company-a.com"
 ```
 
-### Scenario 2: Complex Processing with Errors & Warnings
-```mermaid
-sequenceDiagram
-    participant U1 as Data Processor<br/>(analyst@company.com)
-    participant U2 as Team Lead<br/>(public viewer)
-    participant A as API Server
-    participant D as MongoDB
-    participant J as JWT Service
-    
-    Note over U1,D: Scenario 2: Complex Processing with Errors & Warnings
-    
-    U1->>J: Request JWT Token
-    J-->>U1: eyJhbGciOiJSUzI1NiI...
-    
-    U1->>A: POST /progress<br/>{filename: "customer-import.csv",<br/>counts: {done: 150, warn: 5, failed: 3},<br/>errors: [{line: 15, message: "Invalid email format"},<br/>{line: 42, message: "Missing phone number"}],<br/>warnings: [{line: 8, message: "Deprecated field used"}]}
-    A->>A: Validate JWT & params
-    A->>D: Create progress document with errors/warnings
-    D-->>A: Document created
-    A-->>U1: 200 OK<br/>{result: "created", filename: "customer-import.csv",<br/>counts: {done: 150, warn: 5, failed: 3},<br/>isCompleted: false,<br/>errors: [2 items], warnings: [1 item]}
-    
-    Note over U1,D: Second batch with more issues
-    
-    U1->>A: POST /progress<br/>{filename: "customer-import.csv",<br/>counts: {done: 200, warn: 8, failed: 7},<br/>total: 500,<br/>errors: [{line: 156, message: "Duplicate customer ID"},<br/>{line: 203, message: "Invalid date format"}],<br/>warnings: [{line: 178, message: "Address incomplete"}]}
-    A->>A: Validate & authorize
-    A->>D: Update progress (append errors/warnings)
-    D-->>A: Document updated
-    A-->>U1: 200 OK<br/>{result: "updated", filename: "customer-import.csv",<br/>counts: {done: 350, warn: 13, failed: 10},<br/>total: 500, isCompleted: false,<br/>errors: [4 items], warnings: [2 items]}
-    
-    Note over U1,D: Team Lead monitors progress
-    
-    U2->>A: GET /progress?filename=customer-import.csv
-    A->>D: Find progress by filename
-    D-->>A: Return current progress
-    A-->>U2: 200 OK<br/>{filename: "customer-import.csv",<br/>counts: {done: 350, warn: 13, failed: 10},<br/>total: 500, isCompleted: false,<br/>errors: [4 detailed errors],<br/>warnings: [2 detailed warnings]}
-    
-    Note over U1,D: Final batch completion
-    
-    U1->>A: POST /progress<br/>{filename: "customer-import.csv",<br/>counts: {done: 125, warn: 2, failed: 5},<br/>isLast: true,<br/>errors: [{line: 445, message: "Validation failed"}],<br/>warnings: [{line: 467, message: "Data quality concern"}]}
-    A->>A: Validate & authorize
-    A->>D: Update progress (final completion)
-    D-->>A: Document updated & completed
-    A-->>U1: 200 OK<br/>{result: "updated", filename: "customer-import.csv",<br/>counts: {done: 475, warn: 15, failed: 15},<br/>total: 500, isCompleted: true,<br/>errors: [5 total errors], warnings: [3 total warnings]}
-    
-    Note over U1,D: Final status check
-    
-    U2->>A: GET /progress?email=analyst@company.com
-    A->>D: Find all progress for user
-    D-->>A: Return user's completed files
-    A-->>U2: 200 OK<br/>[{filename: "customer-import.csv",<br/>email: "analyst@company.com",<br/>counts: {done: 475, warn: 15, failed: 15},<br/>total: 500, isCompleted: true,<br/>createdAt: "2024-12-19T15:00:00Z",<br/>updatedAt: "2024-12-19T15:35:45Z"}]
+---
+
+## 🚨 Error Scenarios
+
+### Missing Client KRN
+```bash
+# POST without clientKrn
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"filename": "test.csv", "counts": {"done": 1, "warn": 0, "failed": 0}}'
+# Response: 400 Bad Request
+
+# GET without clientKrn
+curl -X GET "http://localhost:8081/progress?filename=test.csv"
+# Response: 400 Bad Request
 ```
 
-### Scenario 3: Streaming Process (No Total Initially)
-```mermaid
-sequenceDiagram
-    participant U1 as ETL Process<br/>(etl@company.com)
-    participant U2 as Dashboard<br/>(public monitor)
-    participant A as API Server
-    participant D as MongoDB
-    participant J as JWT Service
-    
-    Note over U1,D: Scenario 3: Streaming Process (No Total Initially)
-    
-    U1->>J: Get JWT Token
-    J-->>U1: Bearer token received
-    
-    U1->>A: POST /progress<br/>{filename: "streaming-data.csv",<br/>counts: {done: 1000, warn: 0, failed: 0}}
-    A->>A: Validate JWT
-    A->>D: Create progress (no total yet)
-    D-->>A: Document created
-    A-->>U1: 200 OK<br/>{result: "created",<br/>counts: {done: 1000, warn: 0, failed: 0},<br/>isCompleted: false,<br/>errors: [], warnings: []}
-    
-    Note over U1,D: Dashboard checks early progress
-    
-    U2->>A: GET /progress
-    A->>D: Get all progress
-    D-->>A: Return all progress documents
-    A-->>U2: 200 OK<br/>[{filename: "streaming-data.csv",<br/>counts: {done: 1000, warn: 0, failed: 0},<br/>total: null, isCompleted: false}, ...]
-    
-    Note over U1,D: Continue processing with total discovered
-    
-    U1->>A: POST /progress<br/>{filename: "streaming-data.csv",<br/>counts: {done: 2500, warn: 3, failed: 2},<br/>total: 5000,<br/>warnings: [{line: 1250, message: "Encoding issue detected"}]}
-    A->>A: Validate & authorize
-    A->>D: Update with total added
-    D-->>A: Document updated
-    A-->>U1: 200 OK<br/>{result: "updated",<br/>counts: {done: 3500, warn: 3, failed: 2},<br/>total: 5000, isCompleted: false,<br/>warnings: [1 item]}
-    
-    Note over U1,D: Error occurs in processing
-    
-    U1->>A: POST /progress<br/>{filename: "streaming-data.csv",<br/>counts: {done: 800, warn: 12, failed: 8},<br/>errors: [{line: 4200, message: "Connection timeout"},<br/>{line: 4201, message: "Data corruption detected"}],<br/>warnings: [{line: 4150, message: "Performance degraded"}]}
-    A->>A: Validate & authorize
-    A->>D: Update with errors
-    D-->>A: Document updated
-    A-->>U1: 200 OK<br/>{result: "updated",<br/>counts: {done: 4300, warn: 15, failed: 10},<br/>total: 5000, isCompleted: false,<br/>errors: [2 items], warnings: [2 items]}
-    
-    Note over U1,D: Complete processing
-    
-    U1->>A: POST /progress<br/>{filename: "streaming-data.csv",<br/>counts: {done: 690, warn: 0, failed: 0},<br/>isLast: true}
-    A->>A: Validate & authorize
-    A->>D: Mark as completed
-    D-->>A: Document completed
-    A-->>U1: 200 OK<br/>{result: "updated",<br/>counts: {done: 4990, warn: 15, failed: 10},<br/>total: 5000, isCompleted: true,<br/>errors: [2 items], warnings: [2 items]}
-    
-    Note over U1,D: Final monitoring check
-    
-    U2->>A: GET /progress?filename=streaming-data.csv
-    A->>D: Get final status
-    D-->>A: Return completed document
-    A-->>U2: 200 OK<br/>{id: "...", filename: "streaming-data.csv",<br/>email: "etl@company.com",<br/>counts: {done: 4990, warn: 15, failed: 10},<br/>total: 5000, isCompleted: true,<br/>createdAt: "2024-12-19T16:00:00Z",<br/>updatedAt: "2024-12-19T16:25:15Z",<br/>errors: [detailed error objects],<br/>warnings: [detailed warning objects]}
+### Cross-Client Access Attempts
+```bash
+# Try to access Company A's data with Company B's clientKrn
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-b&filename=company_a_file.csv"
+# Response: 404 Not Found (complete isolation)
 ```
 
-### Scenario 4: Parallel Processing & Authorization
-```mermaid
-sequenceDiagram
-    participant U1 as User A<br/>(team1@company.com)
-    participant U2 as User B<br/>(team2@company.com)
-    participant M as Monitor
-    participant A as API Server
-    participant D as MongoDB
-    
-    Note over U1,D: Parallel Processing Scenario
-    
-    par User A processes File 1
-        U1->>A: POST /progress<br/>{filename: "batch-1.csv",<br/>counts: {done: 100, warn: 0, failed: 0},<br/>total: 300}
-        A->>D: Create progress for batch-1.csv
-        A-->>U1: 200 Created
-        
-        U1->>A: POST /progress<br/>{filename: "batch-1.csv",<br/>counts: {done: 150, warn: 2, failed: 1}}
-        A->>D: Update batch-1.csv progress
-        A-->>U1: 200 Updated<br/>{counts: {done: 250, warn: 2, failed: 1}}
-        
-        U1->>A: POST /progress<br/>{filename: "batch-1.csv",<br/>counts: {done: 47, warn: 0, failed: 2},<br/>isLast: true}
-        A->>D: Complete batch-1.csv
-        A-->>U1: 200 Completed<br/>{counts: {done: 297, warn: 2, failed: 3}}
-    
-    and User B processes File 2
-        U2->>A: POST /progress<br/>{filename: "import-2.csv",<br/>counts: {done: 500, warn: 5, failed: 0}}
-        A->>D: Create progress for import-2.csv
-        A-->>U2: 200 Created
-        
-        U2->>A: POST /progress<br/>{filename: "import-2.csv",<br/>counts: {done: 800, warn: 3, failed: 2},<br/>total: 1500}
-        A->>D: Update import-2.csv progress
-        A-->>U2: 200 Updated<br/>{counts: {done: 1300, warn: 8, failed: 2}}
-        
-        U2->>A: POST /progress<br/>{filename: "import-2.csv",<br/>counts: {done: 190, warn: 0, failed: 0},<br/>isLast: true}
-        A->>D: Complete import-2.csv
-        A-->>U2: 200 Completed<br/>{counts: {done: 1490, warn: 8, failed: 2}}
-    end
-    
-    Note over U1,D: Monitor checks all progress
-    
-    M->>A: GET /progress
-    A->>D: Get all progress documents
-    D-->>A: Return all completed files
-    A-->>M: 200 OK<br/>[<br/>{filename: "batch-1.csv", email: "team1@company.com",<br/>counts: {done: 297, warn: 2, failed: 3}, isCompleted: true},<br/>{filename: "import-2.csv", email: "team2@company.com",<br/>counts: {done: 1490, warn: 8, failed: 2}, isCompleted: true}<br/>]
-    
-    Note over U1,D: Authorization check - User A tries to modify User B's file
-    
-    U1->>A: POST /progress<br/>{filename: "import-2.csv",<br/>counts: {done: 10, warn: 0, failed: 0}}
-    A->>A: Check authorization (team1 ≠ team2)
-    A-->>U1: 403 Forbidden<br/>{error: "Only the original creator can update this file's progress"}
+### Authorization Violations within Client
+```bash
+# User tries to update another user's file within same client
+curl -X POST http://localhost:8081/progress \
+  -H "Authorization: Bearer WRONG_USER_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientKrn": "krn:clnt:company-a",
+    "filename": "alice_file.csv",
+    "counts": {"done": 100, "warn": 0, "failed": 0}
+  }'
+# Response: 403 Forbidden
 ```
 
-## 📊 Sequence Diagram Scenarios Summary
+---
 
-### **Scenario 1: Clean Processing with Total** 🟢
-- **File**: `sales-data.csv` (2000 records)
-- **Pattern**: Simple, clean processing with known total upfront
-- **Outcome**: 1998 successful, 3 warnings, 1 failure
-- **Features**: Shows basic create → update → complete workflow
+## 🏗️ Database Schema
 
-### **Scenario 2: Complex Processing with Errors & Warnings** 🟡
-- **File**: `customer-import.csv` (500 records)  
-- **Pattern**: Discovers total mid-process, accumulates errors/warnings
-- **Outcome**: 475 successful, 15 warnings, 15 failures
-- **Features**: Shows error/warning accumulation and public monitoring
+### Progress Document Structure
+```json
+{
+  "_id": "ObjectId(...)",
+  "clientKrn": "krn:clnt:company-a",
+  "filename": "sales_data.csv",
+  "email": "user@company-a.com",
+  "counts": {
+    "done": 1500,
+    "warn": 25,
+    "failed": 8
+  },
+  "total": 2000,
+  "isCompleted": false,
+  "createdAt": "2024-01-15T10:00:00Z",
+  "updatedAt": "2024-01-15T10:15:00Z",
+  "errors": [
+    {
+      "line": 123,
+      "message": "Invalid format"
+    }
+  ],
+  "warnings": [
+    {
+      "line": 456,
+      "message": "Deprecated field"
+    }
+  ]
+}
+```
 
-### **Scenario 3: Streaming Process** 🔵
-- **File**: `streaming-data.csv` (5000 records)
-- **Pattern**: No initial total, discovers size during processing
-- **Outcome**: 4990 successful, 15 warnings, 10 failures
-- **Features**: Shows total addition mid-stream and error handling
+### Database Indexes (Multitenant)
+```javascript
+// Unique constraint: one progress per client-file-user combination
+db.progress.createIndex(
+  { "clientKrn": 1, "filename": 1, "email": 1 }, 
+  { unique: true }
+)
 
-### **Scenario 4: Parallel Processing & Authorization** 🟣
-- **Files**: `batch-1.csv` & `import-2.csv` (parallel processing)
-- **Pattern**: Multiple users processing different files simultaneously
-- **Outcome**: Both complete successfully
-- **Features**: Shows authorization enforcement and concurrent processing
+// Fast lookups by client + email
+db.progress.createIndex(
+  { "clientKrn": 1, "email": 1 }, 
+  { name: "progress_client_email_idx" }
+)
 
-## 🔑 Key API Behaviors Demonstrated
+// Fast lookups by client only
+db.progress.createIndex(
+  { "clientKrn": 1 }, 
+  { name: "progress_client_idx" }
+)
+```
 
-| Behavior | Shown In | Description |
-|----------|----------|-------------|
-| **Cumulative Counts** | All scenarios | Counts are added, not replaced |
-| **Error/Warning Accumulation** | Scenarios 2 & 3 | Arrays append new items |
-| **Total Discovery** | Scenarios 2 & 3 | Can add total after creation |
-| **Completion Lock** | All scenarios | `isLast: true` prevents further updates |
-| **Public Monitoring** | All scenarios | GET requests work without auth |
-| **Authorization** | Scenario 4 | Only creators can update their files |
-| **Concurrent Processing** | Scenario 4 | Multiple files processed simultaneously |
+---
+
+## 🎯 Key Benefits of Multitenancy
+
+1. **Complete Data Isolation**: Each client's data is completely separate
+2. **Shared Infrastructure**: All clients use the same service instance
+3. **Scalable Architecture**: Add new clients without code changes
+4. **Familiar Filenames**: Multiple clients can use the same filenames
+5. **User Authorization**: Authorization works within client boundaries
+6. **Simplified Monitoring**: Each client can monitor only their own data
+
+## 📊 Monitoring & Analytics
+
+### Client-Specific Dashboards
+```bash
+# Get all active processing for a client
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:my-company"
+
+# Get processing stats for a specific user within client
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:my-company&email=analyst@my-company.com"
+
+# Monitor specific high-priority file within client
+curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:my-company&filename=critical_data.csv"
+```
+
+---
+
+This multitenant architecture ensures complete data isolation while maintaining the familiar API patterns, making it easy for existing clients to adopt the new client KRN requirement.

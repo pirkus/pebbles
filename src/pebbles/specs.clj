@@ -1,5 +1,9 @@
 (ns pebbles.specs
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]))
+
+;; Client KRN specs
+(s/def ::client-krn string?)
 
 ;; Common specs
 (s/def ::filename string?)
@@ -23,6 +27,9 @@
 (s/def ::total (s/nilable (s/and integer? #(> % 0))))
 (s/def ::isLast boolean?)
 
-;; Main request spec for progress update
+;; Main request spec for progress update - clientKrn is now in path, not body
 (s/def ::progress-update-params (s/keys :req-un [::filename ::counts]
                                        :opt-un [::total ::isLast ::errors ::warnings]))
+
+;; Map from camelCase to kebab-case for spec compatibility
+(s/def ::clientKrn ::client-krn)

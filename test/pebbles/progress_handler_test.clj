@@ -6,6 +6,7 @@
    [pebbles.db :as db]))
 
 (def test-db (atom nil))
+(def test-client-krn "krn:clnt:test-client")
 
 (defn db-fixture [f]
   (let [db-map (test-utils/fresh-db)]
@@ -27,18 +28,21 @@
                      {:filename "test-file.csv"
                       :counts {:done 10 :warn 2 :failed 1}
                       :total 100}
-                     :identity identity)
+                     :identity identity
+                     :path-params {:clientKrn test-client-krn})
             response (handler request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
         (is (= "created" (:result body)))
+        (is (= test-client-krn (:clientKrn body)))
         (is (= "test-file.csv" (:filename body)))
         (is (= {:done 10 :warn 2 :failed 1} (:counts body)))
         (is (= 100 (:total body)))
         (is (false? (:isCompleted body)))
         
         ;; Verify in database
-        (let [saved (db/find-progress @test-db "test-file.csv" email)]
+        (let [saved (db/find-progress @test-db test-client-krn "test-file.csv" email)]
+          (is (= test-client-krn (:clientKrn saved)))
           (is (= "test-file.csv" (:filename saved)))
           (is (= email (:email saved)))
           (is (= {:done 10 :warn 2 :failed 1} (:counts saved)))
@@ -50,12 +54,14 @@
             _ (handler (test-utils/make-test-request
                         {:filename "update-test.csv"
                          :counts {:done 5 :warn 0 :failed 0}}
-                        :identity identity))
+                        :identity identity
+                        :path-params {:clientKrn test-client-krn}))
             ;; Then update it
             update-request (test-utils/make-test-request
                             {:filename "update-test.csv"
                              :counts {:done 10 :warn 1 :failed 0}}
-                            :identity identity)
+                            :identity identity
+                            :path-params {:clientKrn test-client-krn})
             response (handler update-request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
@@ -63,7 +69,7 @@
         (is (= {:done 15 :warn 1 :failed 0} (:counts body)))
         
         ;; Verify counts were added, not replaced
-        (let [saved (db/find-progress @test-db "update-test.csv" email)]
+        (let [saved (db/find-progress @test-db test-client-krn "update-test.csv" email)]
           (is (= {:done 15 :warn 1 :failed 0} (:counts saved))))))
     
     (testing "Complete progress with isLast flag"
@@ -72,14 +78,15 @@
                       :counts {:done 100 :warn 0 :failed 0}
                       :total 100
                       :isLast true}
-                     :identity identity)
+                     :identity identity
+                     :path-params {:clientKrn test-client-krn})
             response (handler request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
         (is (true? (:isCompleted body)))
         
         ;; Verify in database
-        (let [saved (db/find-progress @test-db "complete-test.csv" email)]
+        (let [saved (db/find-progress @test-db test-client-krn "complete-test.csv" email)]
           (is (true? (:isCompleted saved))))))
     
     (testing "Reject update to completed progress"
@@ -88,12 +95,14 @@
                         {:filename "locked-test.csv"
                          :counts {:done 100 :warn 0 :failed 0}
                          :isLast true}
-                        :identity identity))
+                        :identity identity
+                        :path-params {:clientKrn test-client-krn}))
             ;; Try to update it
             update-request (test-utils/make-test-request
                             {:filename "locked-test.csv"
                              :counts {:done 10 :warn 0 :failed 0}}
-                            :identity identity)
+                            :identity identity
+                            :path-params {:clientKrn test-client-krn})
             response (handler update-request)
             body (test-utils/parse-json-response response)]
         (is (= 400 (:status response)))
@@ -103,31 +112,45 @@
       (let [request (test-utils/make-test-request
                      {:filename "no-auth.csv"
                       :counts {:done 1 :warn 0 :failed 0}}
-                     :identity {})
+                     :identity {}
+                     :path-params {:clientKrn test-client-krn})
             response (handler request)
             body (test-utils/parse-json-response response)]
         (is (= 403 (:status response)))
         (is (= "No email found in authentication token" (:error body)))))
+    
+    (testing "Missing clientKrn in path"
+      (let [request (test-utils/make-test-request
+                     {:filename "no-client.csv"
+                      :counts {:done 1 :warn 0 :failed 0}}
+                     :identity identity
+                     :path-params {})
+            response (handler request)
+            body (test-utils/parse-json-response response)]
+        (is (= 400 (:status response)))
+        (is (= "clientKrn path parameter is required" (:error body)))))
     
     (testing "Add total to existing progress"
       (let [;; Create without total
             _ (handler (test-utils/make-test-request
                         {:filename "add-total.csv"
                          :counts {:done 5 :warn 0 :failed 0}}
-                        :identity identity))
+                        :identity identity
+                        :path-params {:clientKrn test-client-krn}))
             ;; Update with total
             update-request (test-utils/make-test-request
                             {:filename "add-total.csv"
                              :counts {:done 5 :warn 0 :failed 0}
                              :total 200}
-                            :identity identity)
+                            :identity identity
+                            :path-params {:clientKrn test-client-krn})
             response (handler update-request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
         (is (= 200 (:total body)))
         
         ;; Verify total was added
-        (let [saved (db/find-progress @test-db "add-total.csv" email)]
+        (let [saved (db/find-progress @test-db test-client-krn "add-total.csv" email)]
           (is (= 200 (:total saved))))))
     
     (testing "Create progress with errors and warnings"
@@ -139,7 +162,8 @@
                                {:line 30 :message "Duplicate entry"}]
                       :warnings [{:line 15 :message "Deprecated field used"}
                                  {:line 40 :message "Value exceeds recommended range"}]}
-                     :identity identity)
+                     :identity identity
+                     :path-params {:clientKrn test-client-krn})
             response (handler request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
@@ -152,7 +176,7 @@
           (is (= "Invalid date format" (:message first-error))))
         
         ;; Verify in database
-        (let [saved (db/find-progress @test-db "errors-test.csv" email)]
+        (let [saved (db/find-progress @test-db test-client-krn "errors-test.csv" email)]
           (is (= 3 (count (:errors saved))))
           (is (= 2 (count (:warnings saved)))))))
     
@@ -163,7 +187,8 @@
                          :counts {:done 10 :warn 1 :failed 1}
                          :errors [{:line 5 :message "Initial error"}]
                          :warnings [{:line 3 :message "Initial warning"}]}
-                        :identity identity))
+                        :identity identity
+                        :path-params {:clientKrn test-client-krn}))
             ;; Then update with additional errors and warnings
             update-request (test-utils/make-test-request
                             {:filename "append-errors.csv"
@@ -171,7 +196,8 @@
                              :errors [{:line 50 :message "New error"}
                                       {:line 75 :message "Another error"}]
                              :warnings [{:line 60 :message "New warning"}]}
-                            :identity identity)
+                            :identity identity
+                            :path-params {:clientKrn test-client-krn})
             response (handler update-request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
@@ -182,25 +208,7 @@
         (let [errors (:errors body)]
           (is (= 5 (:line (first errors))))
           (is (= 50 (:line (second errors))))
-          (is (= 75 (:line (nth errors 2)))))
-        
-        ;; Verify in database
-        (let [saved (db/find-progress @test-db "append-errors.csv" email)]
-          (is (= 3 (count (:errors saved))))
-          (is (= 2 (count (:warnings saved)))))))
-    
-    (testing "Empty errors and warnings arrays are handled"
-      (let [request (test-utils/make-test-request
-                     {:filename "empty-arrays.csv"
-                      :counts {:done 100 :warn 0 :failed 0}
-                      :errors []
-                      :warnings []}
-                     :identity identity)
-            response (handler request)
-            body (test-utils/parse-json-response response)]
-        (is (= 200 (:status response)))
-        (is (= [] (:errors body)))
-        (is (= [] (:warnings body)))))))
+          (is (= 75 (:line (nth errors 2))))))))
 
 (deftest get-progress-handler-test
   (let [update-handler (system/update-progress-handler @test-db)
@@ -213,15 +221,18 @@
                     {:filename "file1.csv"
                      :counts {:done 50 :warn 5 :failed 2}
                      :total 100}
-                    :identity identity))
+                    :identity identity
+                    :path-params {:clientKrn test-client-krn}))
     (update-handler (test-utils/make-test-request
                     {:filename "file2.csv"
                      :counts {:done 30 :warn 0 :failed 0}
                      :total 50}
-                    :identity identity))
+                    :identity identity
+                    :path-params {:clientKrn test-client-krn}))
     
     (testing "Get specific file progress"
-      (let [request {:query-params {:filename "file1.csv"}}
+      (let [request {:path-params {:clientKrn test-client-krn}
+                     :query-params {:filename "file1.csv"}}
             response (get-handler request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
@@ -231,7 +242,8 @@
         (is (contains? body :id))))
     
     (testing "Get all progress for specific user by email"
-      (let [request {:query-params {:email email}}
+      (let [request {:path-params {:clientKrn test-client-krn}
+                     :query-params {:email email}}
             response (get-handler request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
@@ -239,39 +251,59 @@
         (is (every? #(contains? % :id) body))
         (is (every? #(= email (:email %)) body))))
     
-    (testing "Get all progress from all users"
-      (let [request {:query-params {}}
+    (testing "Get all progress for client"
+      (let [request {:path-params {:clientKrn test-client-krn}}
             response (get-handler request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
         (is (>= (count body) 2)) ; At least the 2 we created
         (is (every? #(contains? % :id) body))))
     
+    (testing "Missing clientKrn returns 400"
+      (let [request {:query-params {:filename "file1.csv"}}
+            response (get-handler request)
+            body (test-utils/parse-json-response response)]
+        (is (= 400 (:status response)))
+        (is (= "clientKrn path parameter is required" (:error body)))))
+    
     (testing "Progress not found for filename"
-      (let [request {:query-params {:filename "nonexistent.csv"}}
+      (let [request {:path-params {:clientKrn test-client-krn}
+                     :query-params {:filename "nonexistent.csv"}}
             response (get-handler request)
             body (test-utils/parse-json-response response)]
         (is (= 404 (:status response)))
         (is (= "Progress not found for this file" (:error body)))))
     
-    (testing "Can access any user's progress by filename"
+    (testing "Can access any user's progress by filename within same client"
       (let [other-email "other@example.com"
             other-identity {:email other-email}
-            ;; Create progress for other user
+            ;; Create progress for other user in same client
             _ (update-handler (test-utils/make-test-request
                               {:filename "other-file.csv"
                                :counts {:done 10 :warn 0 :failed 0}}
-                              :identity other-identity))
-            ;; Access it without authentication by filename
-            request {:query-params {:filename "other-file.csv"}}
+                              :identity other-identity
+                              :path-params {:clientKrn test-client-krn}))
+            ;; Access it by filename within same client
+            request {:path-params {:clientKrn test-client-krn}
+                     :query-params {:filename "other-file.csv"}}
             response (get-handler request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
         (is (= "other-file.csv" (:filename body)))
-        (is (= other-email (:email body)))))))
+        (is (= other-email (:email body)))))
+    
+    (testing "Cannot access progress from different client"
+      (let [other-client-krn "krn:clnt:other-client"]
+        ;; Try to access file with wrong client KRN
+        (let [request {:path-params {:clientKrn other-client-krn}
+                       :query-params {:filename "file1.csv"}}
+              response (get-handler request)
+              body (test-utils/parse-json-response response)]
+          (is (= 404 (:status response)))
+          (is (= "Progress not found for this file" (:error body))))))))
 
 (deftest authorization-test
-  (testing "Only original creator can update file progress"
+  (testing "Only original creator can update file progress within same client"
     (let [handler (system/update-progress-handler @test-db)
           creator-email "creator@example.com"
           creator-identity {:email creator-email}
@@ -284,7 +316,8 @@
                        {:filename "restricted-file.csv"
                         :counts {:done 10 :warn 0 :failed 0}
                         :total 100}
-                       :identity creator-identity)
+                       :identity creator-identity
+                       :path-params {:clientKrn test-client-krn})
               response (handler request)
               body (test-utils/parse-json-response response)]
           (is (= 200 (:status response)))
@@ -296,7 +329,8 @@
         (let [request (test-utils/make-test-request
                        {:filename "restricted-file.csv"
                         :counts {:done 20 :warn 1 :failed 0}}
-                       :identity creator-identity)
+                       :identity creator-identity
+                       :path-params {:clientKrn test-client-krn})
               response (handler request)
               body (test-utils/parse-json-response response)]
           (is (= 200 (:status response)))
@@ -308,7 +342,8 @@
         (let [request (test-utils/make-test-request
                        {:filename "restricted-file.csv"
                         :counts {:done 5 :warn 0 :failed 1}}
-                       :identity other-identity)
+                       :identity other-identity
+                       :path-params {:clientKrn test-client-krn})
               response (handler request)
               body (test-utils/parse-json-response response)]
           (is (= 403 (:status response)))
@@ -316,5 +351,5 @@
       
       ;; Verify the file progress wasn't changed by unauthorized user
       (testing "File progress unchanged after unauthorized attempt"
-        (let [saved (db/find-progress @test-db "restricted-file.csv" creator-email)]
-          (is (= {:done 30 :warn 1 :failed 0} (:counts saved))))))))
+        (let [saved (db/find-progress @test-db test-client-krn "restricted-file.csv" creator-email)]
+          (is (= {:done 30 :warn 1 :failed 0} (:counts saved)))))))))

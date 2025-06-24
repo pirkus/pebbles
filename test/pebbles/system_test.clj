@@ -48,7 +48,7 @@
 
 (deftest progress-update-specs-test
   (testing "Progress update parameter validation"
-    ;; Valid specs
+    ;; Valid specs (clientKrn no longer in body)
     (is (s/valid? ::specs/progress-update-params
                   {:filename "test.csv"
                    :counts {:done 10 :warn 2 :failed 1}}))
@@ -65,7 +65,7 @@
                         :counts {:done -1 :warn 0 :failed 0}})))
     
     (is (not (s/valid? ::specs/progress-update-params
-                       {:counts {:done 10 :warn 2 :failed 1}})))
+                       {:counts {:done 10 :warn 2 :failed 1}}))) ; Missing filename
     
     (is (not (s/valid? ::specs/progress-update-params
-                       {:filename "test.csv"})))))
+                       {:filename "test.csv"}))))) ; Missing counts
