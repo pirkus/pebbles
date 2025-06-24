@@ -1,0 +1,72 @@
+{
+  "name": "Pebbles Development Environment",
+  "description": "Automated development environment for the Pebbles project with MongoDB",
+  "version": "2.0.0",
+  
+  "install": "bash -c 'echo \"🚀 Setting up Pebbles environment...\" && which clojure >/dev/null 2>&1 || (echo \"Error: Clojure not installed!\" && exit 1) && docker --version >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose) && echo \"✅ Dependencies verified\"'",
+  
+  "start": "bash -c 'sudo docker info >/dev/null 2>&1 || (sudo dockerd >/dev/null 2>&1 & sleep 5) && (sudo docker ps | grep -q mongodb || sudo docker-compose up -d mongodb) && echo \"✅ Services started\"'",
+  
+  "terminals": [
+    {
+      "name": "MongoDB Status",
+      "command": "echo 'MongoDB Status:' && sudo docker ps | grep mongodb || echo 'MongoDB not running'"
+    }
+  ],
+  
+  "environmentVariables": {
+    "MONGO_URI": "mongodb://localhost:27017/pebbles",
+    "PORT": "8081",
+    "USE_EXISTING_MONGO": "true"
+  },
+  
+  "testEnvironmentVariables": {
+    "USE_EXISTING_MONGO": "true",
+    "MONGO_URI": "mongodb://localhost:27017/test"
+  },
+  
+  "tasks": {
+    "test": {
+      "description": "Run the test suite",
+      "environmentVariables": {
+        "USE_EXISTING_MONGO": "true",
+        "MONGO_URI": "mongodb://localhost:27017/test"
+      },
+      "commands": [
+        "clojure -X:test"
+      ]
+    },
+    "dev": {
+      "description": "Start the development server",
+      "environmentVariables": {
+        "MONGO_URI": "mongodb://localhost:27017/pebbles",
+        "PORT": "8081"
+      },
+      "commands": [
+        "clojure -M:run"
+      ]
+    },
+    "repl": {
+      "description": "Start a Clojure REPL",
+      "commands": [
+        "clojure -M:repl"
+      ]
+    },
+    "reset-db": {
+      "description": "Reset MongoDB to clean state",
+      "commands": [
+        "docker-compose down -v",
+        "docker-compose up -d mongodb",
+        "echo 'MongoDB reset to clean state'"
+      ]
+    }
+  },
+  
+  "quickCommands": {
+    "test": "USE_EXISTING_MONGO=true MONGO_URI=mongodb://localhost:27017/test clojure -X:test",
+    "dev": "clojure -M:run",
+    "mongo-status": "sudo docker ps | grep mongodb",
+    "mongo-logs": "sudo docker logs $(sudo docker ps -q -f name=mongodb) --tail 50",
+    "mongo-shell": "sudo docker exec -it $(sudo docker ps -q -f name=mongodb) mongosh"
+  }
+} 
