@@ -62,14 +62,7 @@
             {:result "updated" :progress doc})
           (do
             (db/create-progress db doc)
-            {:result "created" :progress doc}))))))
-
-(defn process-message
-  "Process a single SQS message"
-  [db sqs-client queue-url message]
-  (let [receipt-handle (.receiptHandle message)
-        message-data (parse-message message)]
-    
+            {:result "created" :progress docs
     (if (and message-data (validate-message message-data))
       (let [result (process-progress-update db message-data)]
         ;; Always delete message after processing
