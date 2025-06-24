@@ -1,0 +1,28 @@
+# Clojure
+.cpcache/
+.nrepl-port
+.lein-failures
+.lein-repl-history
+.clj-kondo
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.lsp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test reports
+target/
+test-results/
+
+# Environment setup
+.env.test
+.setup-status
+/tmp/dockerd.pid
