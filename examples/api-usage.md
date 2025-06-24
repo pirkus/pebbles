@@ -9,11 +9,10 @@
 
 ### 1. Start processing - First update with total
 ```bash
-curl -X POST http://localhost:8081/progress \
+curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "clientKrn": "krn:clnt:my-company",
     "filename": "sales_data_2024.csv",
     "counts": {
       "done": 100,
@@ -42,11 +41,10 @@ Response:
 
 ### 2. Update progress - Incremental updates
 ```bash
-curl -X POST http://localhost:8081/progress \
+curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "clientKrn": "krn:clnt:my-company",
     "filename": "sales_data_2024.csv",
     "counts": {
       "done": 500,
@@ -76,16 +74,15 @@ Response:
 
 ### 2b. Update progress with errors and warnings
 ```bash
-curl -X POST http://localhost:8081/progress \
+curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "clientKrn": "krn:clnt:my-company",
     "filename": "sales_data_2024.csv",
     "counts": {
-      "done": 300,
+      "done": 1000,
       "warn": 5,
-      "failed": 3
+      "failed": 1
     },
     "errors": [
       {
@@ -95,20 +92,12 @@ curl -X POST http://localhost:8081/progress \
       {
         "line": 205,
         "message": "Missing required field: customer_id"
-      },
-      {
-        "line": 312,
-        "message": "Duplicate order ID: ORD-12345"
       }
     ],
     "warnings": [
       {
         "line": 88,
         "message": "Product code deprecated: PROD-OLD-123"
-      },
-      {
-        "line": 195,
-        "message": "Price exceeds normal range: $10,000"
       }
     ]
   }'
@@ -121,9 +110,9 @@ Response:
   "clientKrn": "krn:clnt:my-company",
   "filename": "sales_data_2024.csv",
   "counts": {
-    "done": 900,
+    "done": 1600,
     "warn": 15,
-    "failed": 5
+    "failed": 3
   },
   "total": 10000,
   "isCompleted": false,
@@ -135,36 +124,27 @@ Response:
     {
       "line": 205,
       "message": "Missing required field: customer_id"
-    },
-    {
-      "line": 312,
-      "message": "Duplicate order ID: ORD-12345"
     }
   ],
   "warnings": [
     {
       "line": 88,
       "message": "Product code deprecated: PROD-OLD-123"
-    },
-    {
-      "line": 195,
-      "message": "Price exceeds normal range: $10,000"
     }
   ]
 }
 ```
 
-### 3. Complete processing - Mark as finished
+### 3. Complete processing
 ```bash
-curl -X POST http://localhost:8081/progress \
+curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "clientKrn": "krn:clnt:my-company",
     "filename": "sales_data_2024.csv",
     "counts": {
-      "done": 9388,
-      "warn": 0,
+      "done": 8388,
+      "warn": 5,
       "failed": 0
     },
     "isLast": true
@@ -189,7 +169,7 @@ Response:
 
 ### 4. Get progress for specific file within client
 ```bash
-curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:my-company&filename=sales_data_2024.csv"
+curl -X GET "http://localhost:8081/progress/krn:clnt:my-company?filename=sales_data_2024.csv"
 ```
 
 Response:
@@ -237,7 +217,7 @@ Response:
 
 ### 5. Get all progress for specific user within client
 ```bash
-curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:my-company&email=user@example.com"
+curl -X GET "http://localhost:8081/progress/krn:clnt:my-company?email=user@example.com"
 ```
 
 Response:
@@ -282,7 +262,7 @@ Response:
 
 ### 6. Get all progress for client
 ```bash
-curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:my-company"
+curl -X GET "http://localhost:8081/progress/krn:clnt:my-company"
 ```
 
 Response:
@@ -362,7 +342,7 @@ curl -X POST http://localhost:8081/progress \
 Response (400 Bad Request):
 ```json
 {
-  "error": "Invalid parameters: {:filename \"sales_data_2024.csv\", :counts {:done 100, :warn 0, :failed 0}} - failed: (contains? % :clientKrn) spec: :pebbles.specs/progress-update-params\n"
+  "error": "clientKrn path parameter is required"
 }
 ```
 
@@ -374,36 +354,13 @@ curl -X GET "http://localhost:8081/progress?filename=sales_data_2024.csv"
 Response (400 Bad Request):
 ```json
 {
-  "error": "clientKrn query parameter is required"
+  "error": "clientKrn path parameter is required"
 }
 ```
 
-### 3. Trying to update another user's file within same client
+### 3. Trying to access progress with wrong client KRN
 ```bash
-curl -X POST http://localhost:8081/progress \
-  -H "Authorization: Bearer OTHER_USER_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "clientKrn": "krn:clnt:my-company",
-    "filename": "sales_data_2024.csv",
-    "counts": {
-      "done": 100,
-      "warn": 0,
-      "failed": 0
-    }
-  }'
-```
-
-Response (403 Forbidden):
-```json
-{
-  "error": "Only the original creator can update this file's progress"
-}
-```
-
-### 4. Trying to access progress with wrong client KRN
-```bash
-curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:different-company&filename=sales_data_2024.csv"
+curl -X GET "http://localhost:8081/progress/krn:clnt:different-company?filename=sales_data_2024.csv"
 ```
 
 Response (404 Not Found):
@@ -418,33 +375,31 @@ Response (404 Not Found):
 ### Client A operations
 ```bash
 # Client A creates progress
-curl -X POST http://localhost:8081/progress \
+curl -X POST http://localhost:8081/progress/krn:clnt:company-a \
   -H "Authorization: Bearer JWT_TOKEN_A" \
   -H "Content-Type: application/json" \
   -d '{
-    "clientKrn": "krn:clnt:company-a",
     "filename": "data.csv",
     "counts": {"done": 100, "warn": 0, "failed": 0}
   }'
 
 # Client A views their progress
-curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-a&filename=data.csv"
+curl -X GET "http://localhost:8081/progress/krn:clnt:company-a?filename=data.csv"
 ```
 
 ### Client B operations (same filename, different client)
 ```bash
 # Client B creates progress for same filename (isolated)
-curl -X POST http://localhost:8081/progress \
+curl -X POST http://localhost:8081/progress/krn:clnt:company-b \
   -H "Authorization: Bearer JWT_TOKEN_B" \
   -H "Content-Type: application/json" \
   -d '{
-    "clientKrn": "krn:clnt:company-b",
     "filename": "data.csv",
     "counts": {"done": 50, "warn": 5, "failed": 1}
   }'
 
 # Client B views their progress (completely separate from Client A)
-curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-b&filename=data.csv"
+curl -X GET "http://localhost:8081/progress/krn:clnt:company-b?filename=data.csv"
 ```
 
 Both clients can have files with the same name but they are completely isolated from each other!

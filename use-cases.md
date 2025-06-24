@@ -4,8 +4,8 @@
 
 | Method | Endpoint | Authentication | Client KRN Required | Purpose |
 |--------|----------|----------------|---------------------|---------|
-| `POST` | `/progress` | ✅ Required (JWT) | ✅ Yes (in body) | Create/Update progress within client |
-| `GET` | `/progress` | ❌ Public | ✅ Yes (query param) | View progress data within client |
+| `POST` | `/progress/:clientKrn` | ✅ Required (JWT) | ✅ Yes (path param) | Create/Update progress within client |
+| `GET` | `/progress/:clientKrn` | ❌ Public | ✅ Yes (path param) | View progress data within client |
 | `GET` | `/health` | ❌ Public | ❌ No | Health check |
 
 ---
@@ -56,41 +56,18 @@ sequenceDiagram
     C->>J: Get JWT Token
     J-->>C: Return JWT
     
-    C->>A: POST /progress (with JWT + clientKrn)<br/>Initial batch progress
-    A->>A: Validate JWT, clientKrn & params
-    A->>D: Create progress document with clientKrn
-    D-->>A: Document created
-    A-->>C: 200 Created response (with clientKrn)
+    C->>A: POST /progress/krn:clnt:client1 (with JWT)<br/>Initial batch progress
+    A->>C: 200 OK - Progress created
+    C->>A: GET /progress/krn:clnt:client1?filename=data.csv
+    A->>C: 200 OK - Progress data
+    C->>A: POST /progress/krn:clnt:client1 (with JWT)<br/>Update with new counts
+    A->>C: 200 OK - Progress updated
+    C->>A: POST /progress/krn:clnt:client1 (with JWT)<br/>Final batch (isLast: true)
+    A->>C: 200 OK - Progress completed
     
-    loop Processing batches
-        C->>A: POST /progress (with JWT + clientKrn)<br/>Update with new counts
-        A->>A: Validate JWT, clientKrn & authorization
-        A->>D: Update progress within client scope
-        D-->>A: Document updated
-        A-->>C: 200 Updated response
-    end
-    
-    C->>A: POST /progress (with JWT + clientKrn)<br/>Final batch (isLast: true)
-    A->>A: Validate JWT, clientKrn & authorization
-    A->>D: Update progress (mark completed) within client
-    D-->>A: Document updated
-    A-->>C: 200 Updated response (completed)
-    
-    Note over C,D: Public Progress Viewing (Client-Scoped)
-    
-    C->>A: GET /progress?clientKrn=client1&filename=data.csv
-    A->>A: Validate clientKrn parameter
-    A->>D: Find progress by clientKrn + filename
-    D-->>A: Return progress document (if in client)
-    A-->>C: 200 Progress data
-    
-    Note over C,D: Data Isolation Between Clients
-    
-    C->>A: GET /progress?clientKrn=client2&filename=data.csv
-    A->>A: Validate clientKrn parameter
-    A->>D: Find progress by clientKrn + filename
-    D-->>A: No document found (different client)
-    A-->>C: 404 Not Found
+    Note over C,A: Client 2 - Different tenant
+    C->>A: GET /progress/krn:clnt:client2?filename=data.csv
+    A->>C: 404 Not Found (different client)
 ```
 
 ### Multi-Client Data Isolation
@@ -131,16 +108,15 @@ graph LR
 
 ## 📝 API Request/Response Examples
 
-### 1. CREATE New Progress (POST /progress)
+### 1. CREATE New Progress (POST /progress/:clientKrn)
 
 #### Request
 ```http
-POST /progress
+POST /progress/krn:clnt:my-company
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
 Content-Type: application/json
 
 {
-  "clientKrn": "krn:clnt:my-company",
   "filename": "customer-data.csv",
   "counts": {
     "done": 100,
@@ -201,16 +177,15 @@ Content-Type: application/json
 
 ---
 
-### 2. UPDATE Existing Progress (POST /progress)
+### 2. UPDATE Existing Progress (POST /progress/:clientKrn)
 
 #### Request
 ```http
-POST /progress
+POST /progress/krn:clnt:my-company
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
 Content-Type: application/json
 
 {
-  "clientKrn": "krn:clnt:my-company",
   "filename": "customer-data.csv",
   "counts": {
     "done": 200,
@@ -276,7 +251,7 @@ Content-Type: application/json
 
 ### 3. GET Progress by Client + Filename
 ```http
-GET /progress?clientKrn=krn:clnt:my-company&filename=customer-data.csv
+GET /progress/krn:clnt:my-company?filename=customer-data.csv
 ```
 
 #### Response (200 OK)
@@ -326,7 +301,7 @@ GET /progress?clientKrn=krn:clnt:my-company&filename=customer-data.csv
 
 ### 4. GET All Progress for Client
 ```http
-GET /progress?clientKrn=krn:clnt:my-company
+GET /progress/krn:clnt:my-company
 ```
 
 #### Response (200 OK)
@@ -365,7 +340,7 @@ GET /progress?clientKrn=krn:clnt:my-company
 
 ### 5. GET User Progress within Client
 ```http
-GET /progress?clientKrn=krn:clnt:my-company&email=user@company.com
+GET /progress/krn:clnt:my-company?email=user@company.com
 ```
 
 #### Response (200 OK)

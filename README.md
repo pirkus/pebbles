@@ -43,7 +43,7 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 
 ## API Endpoints
 
-### POST /progress - Update Progress (Authenticated)
+### POST /progress/:clientKrn - Update Progress (Authenticated)
 Create or update progress for a file within a client tenant. Only authenticated users can update, and only the original creator can modify their file's progress within the same tenant.
 
 **Headers:**
@@ -52,7 +52,6 @@ Create or update progress for a file within a client tenant. Only authenticated 
 **Request Body:**
 ```json
 {
-  "clientKrn": "krn:clnt:my-company",
   "filename": "sales-data.csv",
   "counts": {
     "done": 150,
@@ -117,11 +116,10 @@ Create or update progress for a file within a client tenant. Only authenticated 
 - **400 Bad Request**: If file is already completed
 - **400 Bad Request**: If request validation fails or clientKrn is missing
 
-### GET /progress - Retrieve Progress (Requires clientKrn)
+### GET /progress/:clientKrn - Retrieve Progress (Requires clientKrn)
 Retrieve progress information for a specific client. No authentication required, but clientKrn is mandatory for data isolation.
 
 **Query Parameters:**
-- `clientKrn` (required): Client identifier (e.g., `krn:clnt:my-company`)
 - `filename` (optional): Get progress for a specific file within the client
 - `email` (optional): Get all progress for a specific user within the client
 
@@ -129,19 +127,19 @@ Retrieve progress information for a specific client. No authentication required,
 
 #### Get All Progress for Client
 ```
-GET /progress?clientKrn=krn:clnt:my-company
+GET /progress/krn:clnt:my-company
 ```
 Returns all progress records for the specified client, sorted by most recent updates.
 
 #### Get Specific File Progress within Client
 ```
-GET /progress?clientKrn=krn:clnt:my-company&filename=sales-data.csv
+GET /progress/krn:clnt:my-company?filename=sales-data.csv
 ```
 Returns progress for the specified file within the client tenant.
 
 #### Get User's Progress within Client
 ```
-GET /progress?clientKrn=krn:clnt:my-company&email=user@example.com
+GET /progress/krn:clnt:my-company?email=user@example.com
 ```
 Returns all files being processed by the specified user within the client tenant.
 
