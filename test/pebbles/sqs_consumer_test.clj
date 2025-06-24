@@ -1,7 +1,7 @@
 (ns pebbles.sqs-consumer-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [pebbles.sqs-consumer :as sqs]
+   [pebbles.test-sqs-consumer :as sqs]
    [pebbles.test-utils :as test-utils]
    [pebbles.mock-db :as db]))
 

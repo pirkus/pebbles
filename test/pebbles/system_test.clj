@@ -2,6 +2,7 @@
   (:require
    [clojure.test :refer [deftest is testing]]
    [pebbles.system :as system]
+   [pebbles.test-system :as test-system]
    [pebbles.specs :as specs]
    [clojure.spec.alpha :as s])
   (:import
@@ -36,29 +37,33 @@
 
 (deftest system-component-test
   (testing "System components can be created"
-    (let [sys (system/system)]
+    (let [sys (test-system/test-system {})]
       (is (contains? sys :mongo))
       (is (contains? sys :http))
       (is (instance? MongoComponent (:mongo sys)))
       (is (instance? HttpComponent (:http sys)))))
   
   (testing "System components with SQS enabled"
-    (with-redefs [system/env (fn [k] (when (= k :sqs-enabled) "true"))]
-      (let [sys (system/system)]
-        (is (contains? sys :sqs-consumer))
-        (is (instance? SQSConsumerComponent (:sqs-consumer sys))))))
+    (let [sys (test-system/test-system
+               {:sqs-enabled? true
+                :sqs-queue-url "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"
+                :aws-region "us-east-1"})]
+      (is (contains? sys :sqs-consumer))
+      (is (instance? SQSConsumerComponent (:sqs-consumer sys)))))
   
   (testing "System components with Kafka enabled"
-    (with-redefs [system/env (fn [k] (when (= k :kafka-enabled) "true"))]
-      (let [sys (system/system)]
-        (is (contains? sys :kafka-consumer))
-        (is (instance? KafkaConsumerComponent (:kafka-consumer sys))))))
+    (let [sys (test-system/test-system
+               {:kafka-enabled? true
+                :kafka-bootstrap-servers "localhost:9092"
+                :kafka-group-id "test-consumer"
+                :kafka-topic-name "test-topic"})]
+      (is (contains? sys :kafka-consumer))
+      (is (instance? KafkaConsumerComponent (:kafka-consumer sys)))))
   
   (testing "System components with both consumers disabled"
-    (with-redefs [system/env (fn [k] nil)]
-      (let [sys (system/system)]
-        (is (not (contains? sys :sqs-consumer)))
-        (is (not (contains? sys :kafka-consumer)))))))
+    (let [sys (test-system/test-system {})]
+      (is (not (contains? sys :sqs-consumer)))
+      (is (not (contains? sys :kafka-consumer))))))
 
 (deftest route-expansion-test
   (testing "Routes can be expanded without errors"

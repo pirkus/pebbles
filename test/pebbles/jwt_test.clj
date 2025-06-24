@@ -1,7 +1,7 @@
 (ns pebbles.jwt-test
   (:require
    [clojure.test :refer [deftest is testing]]
-   [pebbles.jwt :as jwt]))
+   [pebbles.test-jwt :as jwt]))
 
 (deftest auth-interceptor-test
   (testing "Missing Authorization header"
@@ -23,8 +23,18 @@
       (is (= 401 (get-in result [:response :status])))
       (is (= "Invalid or expired token" (get-in result [:response :body])))))
   
-  ;; Note: Testing with valid JWT would require mocking or a test JWT service
+  (testing "Valid JWT token"
+    (let [context {:request {:headers {"authorization" "Bearer test-valid-token"}}}
+          result ((:enter jwt/auth-interceptor) context)]
+      (is (nil? (:response result)))
+      (is (= "test@example.com" (get-in result [:request :identity :email])))
+      (is (= "Test User" (get-in result [:request :identity :name])))))
+  
   (testing "JWT verification function with invalid token"
-    ;; Use a properly formatted (but invalid) JWT token
-    (let [result (jwt/verify-google-jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.invalid_signature")]
-      (is (nil? result)))))
+    (let [result (jwt/verify-google-jwt "invalid-token")]
+      (is (nil? result))))
+  
+  (testing "JWT verification function with valid token"
+    (let [result (jwt/verify-google-jwt "test-valid-token")]
+      (is (= "test@example.com" (:email result)))
+      (is (= "123456789" (:sub result))))))

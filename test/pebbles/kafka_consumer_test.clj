@@ -1,7 +1,7 @@
 (ns pebbles.kafka-consumer-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [pebbles.kafka-consumer :as kafka]
+   [pebbles.test-kafka-consumer :as kafka]
    [pebbles.test-utils :as test-utils]
    [pebbles.mock-db :as db]))
 
