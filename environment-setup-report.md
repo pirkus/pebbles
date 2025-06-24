@@ -20,6 +20,22 @@
 - Docker daemon: Running ✅
 - MongoDB container: Running on port 27017 ✅
 
+## Automatic Setup Configuration
+
+### Setup Method
+The environment is now configured to use **Cursor's automatic environment setup** via `.cursor/environment.json`. This file is automatically executed when the background agent starts.
+
+### Configuration Details
+- **Install Command**: Verifies dependencies and installs Docker/Docker Compose if needed
+- **Start Command**: Ensures Docker daemon and MongoDB are running
+- **Environment Variables**: Automatically set for both development and testing
+- **Terminal**: Opens with MongoDB status information
+
+### Key Files
+- `.cursor/environment.json` - Main environment configuration (auto-executed by Cursor)
+- `test/pebbles/test_utils.clj` - Modified to support existing MongoDB connections
+- `CURSOR_ENVIRONMENT_SETUP.md` - Documentation for the automatic setup
+
 ## Test Results
 
 ### Test Execution Summary
@@ -32,35 +48,52 @@
 ### Test Suites Executed
 1. `pebbles.db-test` - Database operations tests
 2. `pebbles.http-resp-test` - HTTP response handler tests
-3. `pebbles.jwt-test` - JWT verification tests
+3. `pebbles.jwt-test` - JWT token handling tests
 4. `pebbles.progress-handler-test` - Progress handler tests
 5. `pebbles.system-test` - System integration tests
 6. `pebbles.validation-test` - Validation tests
 
-### Configuration Changes Made
+## Key Improvements
 
-#### Test Utilities Enhancement
-Modified `test/pebbles/test_utils.clj` to support using an existing MongoDB instance instead of requiring Testcontainers:
-- Added environment variable support: `USE_EXISTING_MONGO`
-- Added MongoDB URI configuration: `MONGO_URI`
-- Implemented collection cleanup for test isolation
+### 1. Automatic Environment Setup
+- No manual scripts needed - Cursor handles everything automatically
+- Consistent environment across all background agent sessions
+- Self-healing setup that checks and starts services as needed
 
-#### Test Execution Command
+### 2. Test Environment Support
+- Tests can use existing MongoDB instance instead of Testcontainers
+- Faster test execution without Docker-in-Docker complexity
+- Environment variables automatically configured for testing
+
+### 3. Simplified Configuration
+- Single `.cursor/environment.json` file manages entire setup
+- Follows Cursor's documented standards
+- No custom scripts or wrappers needed
+
+## Quick Reference
+
+### Running Tests
 ```bash
 USE_EXISTING_MONGO=true MONGO_URI=mongodb://localhost:27017/test clojure -X:test
 ```
 
-### Notes
-- JWT tests showed expected error messages for invalid token verification scenarios
-- All tests are properly isolated with database cleanup between tests
-- MongoDB data persistence is handled through Docker volumes
-- The system is ready for development and testing
+### Starting Application
+```bash
+clojure -M:run
+```
 
-## Recommendations
-1. Consider adding the test environment variables to a `.env` file or test configuration
-2. Document the MongoDB startup process for other developers
-3. Consider using Docker Compose for the entire development workflow
-4. Add CI/CD configuration that uses the same test setup
+### MongoDB Commands
+```bash
+# Check status
+sudo docker ps | grep mongodb
+
+# View logs
+sudo docker logs $(sudo docker ps -q -f name=mongodb) --tail 50
+
+# Access shell
+sudo docker exec -it $(sudo docker ps -q -f name=mongodb) mongosh
+```
 
 ## Conclusion
-The environment is successfully set up and all tests are passing. The project is ready for development work.
+
+The Pebbles project environment is now fully configured for automatic setup in Cursor's background agents. The `.cursor/environment.json` file handles all initialization, ensuring a consistent and reliable development environment every time a background agent starts.
