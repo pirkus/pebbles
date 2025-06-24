@@ -12,7 +12,7 @@
 (def use-existing-mongo (System/getenv "USE_EXISTING_MONGO"))
 
 (defn start-mongodb-container []
-  (let [container (MongoDBContainer. 
+  (let [container (MongoDBContainer.
                    (DockerImageName/parse "mongo:6.0"))]
     (.start container)
     container))
