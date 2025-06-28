@@ -1,7 +1,27 @@
 (ns pebbles.statistical-grouping
   (:require
-   [clojure.string :as str]
-   [clojure.set :as set]))
+   [clojure.string :as str]))
+
+(defn extract-quoted-strings
+  "Extract all quoted strings from a message"
+  [message]
+  (let [quoted-pattern #"(?:'[^']*'|\"[^\"]*\")"]
+    (re-seq quoted-pattern message)))
+
+(defn replace-quotes-with-placeholders
+  "Replace quoted strings with placeholders in the message"
+  [message quoted-strings]
+  (reduce (fn [m [idx q]]
+            (str/replace m q (str "QUOTE" idx)))
+          message
+          (map-indexed vector quoted-strings)))
+
+(defn restore-quoted-strings
+  "Restore quoted strings from placeholders"
+  [token quoted-strings]
+  (if-let [[_ idx] (re-find #"QUOTE(\d+)" token)]
+    (nth quoted-strings (Integer/parseInt idx))
+    token))
 
 (defn tokenize-message
   "Split a message into meaningful tokens preserving common patterns"
@@ -9,22 +29,10 @@
   (if (nil? message)
     []
     ;; Split on whitespace but preserve quoted strings and common patterns
-    (let [;; First, extract quoted strings as single tokens
-          quoted-pattern #"(?:'[^']*'|\"[^\"]*\")"
-          quoted-strings (re-seq quoted-pattern message)
-          ;; Replace quoted strings with placeholders
-          msg-without-quotes (reduce (fn [m [idx q]]
-                                      (str/replace m q (str "QUOTE" idx)))
-                                    message
-                                    (map-indexed vector quoted-strings))
-          ;; Now tokenize on whitespace
+    (let [quoted-strings (extract-quoted-strings message)
+          msg-without-quotes (replace-quotes-with-placeholders message quoted-strings)
           tokens (str/split msg-without-quotes #"\s+")
-          ;; Restore quoted strings
-          restored-tokens (map (fn [token]
-                                (if-let [[_ idx] (re-find #"QUOTE(\d+)" token)]
-                                  (nth quoted-strings (Integer/parseInt idx))
-                                  token))
-                              tokens)]
+          restored-tokens (map #(restore-quoted-strings % quoted-strings) tokens)]
       (vec restored-tokens))))
 
 (defn calculate-token-variability
@@ -133,70 +141,80 @@
                                        tokens1 tokens2)))]
         (double (/ matches (count tokens1)))))))
 
+(defn find-similar-group
+  "Find a group that contains a message similar to the given message"
+  [groups msg threshold]
+  (first
+   (filter
+    (fn [group]
+      (some #(>= (message-similarity (:message msg) 
+                                   (:message %)) 
+                threshold)
+            (:members group)))
+    groups)))
+
+(defn group-messages-by-similarity
+  "Group messages based on similarity threshold"
+  [messages threshold]
+  (reduce
+   (fn [acc msg]
+     (if-let [found-group (find-similar-group acc msg threshold)]
+       (map (fn [g]
+              (if (= g found-group)
+                (update g :members conj msg)
+                g))
+            acc)
+       (conj acc {:members [msg]})))
+   []
+   messages))
+
+(defn extract-pattern-from-group
+  "Extract pattern and variations from a group of similar messages"
+  [group]
+  (let [messages (map :message (:members group))
+        tokenized (map tokenize-message messages)
+        ;; Find the pattern by normalizing tokens
+        pattern-tokens (if (= 1 (count tokenized))
+                        ;; Single message - normalize it
+                        (map normalize-token (first tokenized))
+                        ;; Multiple messages - find common pattern
+                        (let [variability (calculate-token-variability tokenized)]
+                          (map-indexed
+                           (fn [i tokens-at-pos]
+                             (let [var-score (get variability i 0)]
+                               (if (> var-score 0.5)
+                                 (normalize-token (first tokens-at-pos))
+                                 (first tokens-at-pos))))
+                           (apply map vector tokenized))))
+        pattern (str/join " " pattern-tokens)
+        ;; Extract variations for variable positions - keep line mapping
+        var-positions (keep-indexed
+                      (fn [i token]
+                        (when (str/starts-with? (str token) "{")
+                          i))
+                      pattern-tokens)
+        ;; Create line items with their variations
+        line-items (if (empty? var-positions)
+                    ;; No variations - just lines
+                    (map (fn [member]
+                          {:line (:line member)})
+                         (:members group))
+                    ;; With variations - include extracted values for each line
+                    (map (fn [member tokens]
+                          {:line (:line member)
+                           :values (vec (map #(get tokens %) var-positions))})
+                         (:members group)
+                         tokenized))]
+    {:pattern pattern
+     :lines line-items
+     :message-count (count (:members group))}))
+
 (defn group-similar-messages
   "Group messages by similarity"
   ([messages] (group-similar-messages messages {}))
   ([messages {:keys [threshold] :or {threshold 0.7}}]
-   (let [;; Group messages using simple similarity
-         groups (reduce
-                 (fn [acc msg]
-                   (let [found-group (first
-                                     (filter
-                                      (fn [group]
-                                        (some #(>= (message-similarity (:message msg) 
-                                                                     (:message %)) 
-                                                  threshold)
-                                              (:members group)))
-                                      acc))]
-                     (if found-group
-                       (map (fn [g]
-                              (if (= g found-group)
-                                (update g :members conj msg)
-                                g))
-                            acc)
-                       (conj acc {:members [msg]}))))
-                 []
-                 messages)]
-     ;; Process each group to extract pattern
-     (map (fn [group]
-            (let [messages (map :message (:members group))
-                  tokenized (map tokenize-message messages)
-                  ;; Find the pattern by normalizing tokens
-                  pattern-tokens (if (= 1 (count tokenized))
-                                  ;; Single message - normalize it
-                                  (map normalize-token (first tokenized))
-                                  ;; Multiple messages - find common pattern
-                                  (let [variability (calculate-token-variability tokenized)]
-                                    (map-indexed
-                                     (fn [i tokens-at-pos]
-                                       (let [var-score (get variability i 0)]
-                                         (if (> var-score 0.5)
-                                           (normalize-token (first tokens-at-pos))
-                                           (first tokens-at-pos))))
-                                     (apply map vector tokenized))))
-                  pattern (str/join " " pattern-tokens)
-                  ;; Extract variations for variable positions - keep line mapping
-                  var-positions (keep-indexed
-                                (fn [i token]
-                                  (when (str/starts-with? (str token) "{")
-                                    i))
-                                pattern-tokens)
-                  ;; Create line items with their variations
-                  line-items (if (empty? var-positions)
-                              ;; No variations - just lines
-                              (map (fn [member]
-                                    {:line (:line member)})
-                                   (:members group))
-                              ;; With variations - include extracted values for each line
-                              (map (fn [member tokens]
-                                    {:line (:line member)
-                                     :values (vec (map #(get tokens %) var-positions))})
-                                   (:members group)
-                                   tokenized))]
-              {:pattern pattern
-               :lines line-items
-               :message-count (count (:members group))}))
-          groups))))
+   (let [groups (group-messages-by-similarity messages threshold)]
+     (map extract-pattern-from-group groups))))
 
 (defn normalize-messages
   "Normalize a set of messages by extracting patterns"
@@ -248,48 +266,53 @@
   [message existing-patterns]
   (first (filter #(pattern-matches-message? % message) existing-patterns)))
 
+(defn match-items-against-patterns
+  "Partition items into matched (with pattern) and unmatched"
+  [items existing-patterns]
+  (reduce (fn [acc item]
+            (if-let [pattern (match-against-patterns (:message item) existing-patterns)]
+              (update acc :matched conj (assoc item :matched-pattern pattern))
+              (update acc :unmatched conj item)))
+          {:matched [] :unmatched []}
+          items))
+
+(defn group-matched-by-pattern
+  "Group matched items by their pattern and extract values"
+  [matched-items]
+  (when (seq matched-items)
+    (->> matched-items
+         (group-by :matched-pattern)
+         (map (fn [[pattern items]]
+                {:pattern pattern
+                 :lines (map (fn [item]
+                              {:line (:line item)
+                               :values (extract-values-for-pattern pattern (:message item))})
+                            items)
+                 :message-count (count items)})))))
+
+(defn merge-groups-with-existing
+  "Merge new groups with existing groups, combining line numbers and counts"
+  [existing-groups new-groups]
+  (let [all-patterns (into {} (map (fn [g] [(:pattern g) g]) existing-groups))]
+    (vals (reduce (fn [acc new-group]
+                   (update acc (:pattern new-group)
+                          (fn [existing]
+                            (if existing
+                              {:pattern (:pattern existing)
+                               :lines (concat (:lines existing) (:lines new-group))
+                               :message-count (+ (:message-count existing) (:message-count new-group))}
+                              new-group))))
+                 all-patterns
+                 new-groups))))
+
 (defn consolidate-with-existing-patterns
   "Consolidate messages using existing patterns when possible"
   [items existing-groups]
   (let [existing-patterns (map :pattern existing-groups)
-        ;; Try to match each message against existing patterns
-        {:keys [matched unmatched]} 
-        (reduce (fn [acc item]
-                  (if-let [pattern (match-against-patterns (:message item) existing-patterns)]
-                    (update acc :matched conj (assoc item :matched-pattern pattern))
-                    (update acc :unmatched conj item)))
-                {:matched [] :unmatched []}
-                items)
-        
-        ;; Group matched items by their pattern
-        matched-groups (when (seq matched)
-                        (->> matched
-                             (group-by :matched-pattern)
-                             (map (fn [[pattern items]]
-                                    {:pattern pattern
-                                     :lines (map (fn [item]
-                                                  {:line (:line item)
-                                                   :values (extract-values-for-pattern pattern (:message item))})
-                                                items)
-                                     :message-count (count items)}))))
-        
-        ;; Process unmatched items to find new patterns
+        {:keys [matched unmatched]} (match-items-against-patterns items existing-patterns) 
+        matched-groups (group-matched-by-pattern matched) 
         new-groups (when (seq unmatched)
                     (consolidate-messages-with-patterns unmatched))]
-    
-    ;; Merge matched groups with existing groups
-    (let [all-patterns (into {} (map (fn [g] [(:pattern g) g]) existing-groups))]
-      (concat
-       ;; Merge matched items into existing groups
-       (vals (reduce (fn [acc new-group]
-                      (update acc (:pattern new-group)
-                              (fn [existing]
-                                (if existing
-                                  {:pattern (:pattern existing)
-                                   :lines (concat (:lines existing) (:lines new-group))
-                                   :message-count (+ (:message-count existing) (:message-count new-group))}
-                                  new-group))))
-                    all-patterns
-                    matched-groups))
-       ;; Add new pattern groups
-       (or new-groups [])))))
+    (concat
+     (merge-groups-with-existing existing-groups matched-groups)
+     (or new-groups []))))

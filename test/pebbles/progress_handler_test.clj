@@ -306,14 +306,13 @@
         (is (= other-email (:email body)))))
     
     (testing "Cannot access progress from different client"
-      (let [other-client-krn "krn:clnt:other-client"]
-        ;; Try to access file with wrong client KRN
-        (let [request {:path-params {:clientKrn other-client-krn}
-                       :query-params {:filename "file1.csv"}}
-              response (get-handler request)
-              body (test-utils/parse-json-response response)]
-          (is (= 404 (:status response)))
-          (is (= "Progress not found for this file" (:error body))))))))
+      (let [other-client-krn "krn:clnt:other-client"
+            request {:path-params {:clientKrn other-client-krn}
+                     :query-params {:filename "file1.csv"}}
+            response (get-handler request)
+            body (test-utils/parse-json-response response)]
+        (is (= 404 (:status response)))
+        (is (= "Progress not found for this file" (:error body)))))))
 
 (deftest authorization-test
   (testing "Only original creator can update file progress within same client"

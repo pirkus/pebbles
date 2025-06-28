@@ -21,15 +21,20 @@
   [items]
   (sg/consolidate-messages-with-patterns items))
 
+(defn get-consolidation-fn
+  "Returns the appropriate consolidation function based on whether patterns should be used"
+  [use-patterns?]
+  (if use-patterns? 
+    consolidate-messages-with-patterns 
+    consolidate-messages))
+
 (defn prepare-progress-data
   "Prepare progress data by consolidating duplicate error/warning messages.
    Uses pattern matching by default to group similar messages."
   ([progress-data]
    (prepare-progress-data progress-data true))
   ([progress-data use-patterns?]
-   (let [consolidation-fn (if use-patterns? 
-                            consolidate-messages-with-patterns 
-                            consolidate-messages)]
+   (let [consolidation-fn (get-consolidation-fn use-patterns?)]
      (cond-> progress-data
        (:errors progress-data) (update :errors consolidation-fn)
        (:warnings progress-data) (update :warnings consolidation-fn)))))

@@ -52,25 +52,25 @@
       (is (= 3 (count grouped)))
       
       ;; Check account number group
-      (let [account-group (first (filter #(re-find #"account number" (:pattern %)) grouped))]
-        (let [line-numbers (map :line (:lines account-group))
-              all-values (mapcat :values (:lines account-group))]
-          (is (= [10 20 60] line-numbers))
-          (is (= #{"123456" "789012" "999999"} (set all-values)))))
+      (let [account-group (first (filter #(re-find #"account number" (:pattern %)) grouped))
+            line-numbers (map :line (:lines account-group))
+            all-values (mapcat :values (:lines account-group))]
+        (is (= [10 20 60] line-numbers))
+        (is (= #{"123456" "789012" "999999"} (set all-values))))
       
       ;; Check missing field group
-      (let [field-group (first (filter #(re-find #"required field" (:pattern %)) grouped))]
-        (let [line-numbers (map :line (:lines field-group))
-              all-values (mapcat :values (:lines field-group))]
-          (is (= [30 40 70] line-numbers))
-          (is (= #{"'username'" "'email'" "'password'"} (set all-values)))))
+      (let [field-group (first (filter #(re-find #"required field" (:pattern %)) grouped))
+            line-numbers (map :line (:lines field-group))
+            all-values (mapcat :values (:lines field-group))]
+        (is (= [30 40 70] line-numbers))
+        (is (= #{"'username'" "'email'" "'password'"} (set all-values))))
       
       ;; Check timeout group
-      (let [timeout-group (first (filter #(re-find #"timeout" (:pattern %)) grouped))]
-        (let [line-numbers (map :line (:lines timeout-group))
-              all-values (mapcat :values (:lines timeout-group))]
-          (is (= [50 80] line-numbers))
-          (is (= #{"30" "60"} (set all-values))))))))
+      (let [timeout-group (first (filter #(re-find #"timeout" (:pattern %)) grouped))
+            line-numbers (map :line (:lines timeout-group))
+            all-values (mapcat :values (:lines timeout-group))]
+        (is (= [50 80] line-numbers))
+        (is (= #{"30" "60"} (set all-values)))))))
 
 (deftest similarity-threshold-test
   (testing "Groups messages with configurable similarity threshold"
