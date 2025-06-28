@@ -126,17 +126,17 @@ Content-Type: application/json
   "total": 1000,
   "errors": [
     {
-      "line": 15,
+      "lines": [15],
       "message": "Invalid email format in customer record"
     },
     {
-      "line": 42,
+      "lines": [42],
       "message": "Missing required field: phone_number"
     }
   ],
   "warnings": [
     {
-      "line": 8,
+      "lines": [8],
       "message": "Deprecated field 'fax' still in use"
     }
   ]
@@ -158,17 +158,17 @@ Content-Type: application/json
   "isCompleted": false,
   "errors": [
     {
-      "line": 15,
+      "lines": [15],
       "message": "Invalid email format in customer record"
     },
     {
-      "line": 42,
+      "lines": [42],
       "message": "Missing required field: phone_number"
     }
   ],
   "warnings": [
     {
-      "line": 8,
+      "lines": [8],
       "message": "Deprecated field 'fax' still in use"
     }
   ]
@@ -194,13 +194,13 @@ Content-Type: application/json
   },
   "errors": [
     {
-      "line": 156,
+      "lines": [156],
       "message": "Duplicate customer ID detected"
     }
   ],
   "warnings": [
     {
-      "line": 134,
+      "lines": [134],
       "message": "Address format differs from standard"
     }
   ]
@@ -222,25 +222,25 @@ Content-Type: application/json
   "isCompleted": false,
   "errors": [
     {
-      "line": 15,
+      "lines": [15],
       "message": "Invalid email format in customer record"
     },
     {
-      "line": 42,
+      "lines": [42],
       "message": "Missing required field: phone_number"
     },
     {
-      "line": 156,
+      "lines": [156],
       "message": "Duplicate customer ID detected"
     }
   ],
   "warnings": [
     {
-      "line": 8,
+      "lines": [8],
       "message": "Deprecated field 'fax' still in use"
     },
     {
-      "line": 134,
+      "lines": [134],
       "message": "Address format differs from standard"
     }
   ]
@@ -272,25 +272,25 @@ GET /progress/krn:clnt:my-company?filename=customer-data.csv
   "updatedAt": "2024-01-15T10:15:00Z",
   "errors": [
     {
-      "line": 15,
+      "lines": [15],
       "message": "Invalid email format in customer record"
     },
     {
-      "line": 42,
+      "lines": [42],
       "message": "Missing required field: phone_number"
     },
     {
-      "line": 156,
+      "lines": [156],
       "message": "Duplicate customer ID detected"
     }
   ],
   "warnings": [
     {
-      "line": 8,
+      "lines": [8],
       "message": "Deprecated field 'fax' still in use"
     },
     {
-      "line": 134,
+      "lines": [134],
       "message": "Address format differs from standard"
     }
   ]
@@ -536,6 +536,107 @@ curl -X GET "http://localhost:8081/progress?clientKrn=krn:clnt:company-a&email=d
 
 ---
 
+## 🔄 Error and Warning Consolidation
+
+### Use Case 5: Automatic Message Consolidation
+
+**Scenario**: Processing a file with many duplicate validation errors
+
+Pebbles automatically consolidates duplicate error and warning messages, grouping them by message content and combining their line numbers into arrays. This reduces storage overhead and improves error analysis.
+
+**Example Processing Workflow:**
+```bash
+# First batch - initial duplicate errors
+curl -X POST http://localhost:8081/progress/krn:clnt:data-validator \
+  -H "Authorization: Bearer JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "customer_records.csv",
+    "counts": {"done": 2000, "warn": 4, "failed": 3},
+    "total": 10000,
+    "errors": [
+      {"line": 15, "message": "Invalid email format"},
+      {"line": 42, "message": "Missing phone number"},
+      {"line": 78, "message": "Invalid email format"}
+    ],
+    "warnings": [
+      {"line": 8, "message": "Deprecated field: fax"},
+      {"line": 23, "message": "Deprecated field: fax"},
+      {"line": 67, "message": "Large age value"},
+      {"line": 89, "message": "Deprecated field: fax"}
+    ]
+  }'
+```
+
+```bash
+# Second batch - more duplicates
+curl -X POST http://localhost:8081/progress/krn:clnt:data-validator \
+  -H "Authorization: Bearer JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "customer_records.csv",
+    "counts": {"done": 1500, "warn": 2, "failed": 2},
+    "errors": [
+      {"line": 156, "message": "Invalid email format"},
+      {"line": 203, "message": "Missing phone number"}
+    ],
+    "warnings": [
+      {"line": 134, "message": "Deprecated field: fax"},
+      {"line": 178, "message": "Large age value"}
+    ]
+  }'
+```
+
+**Response (Consolidated):**
+```json
+{
+  "result": "updated",
+  "clientKrn": "krn:clnt:data-validator",
+  "filename": "customer_records.csv",
+  "counts": {
+    "done": 3500,
+    "warn": 6,
+    "failed": 5
+  },
+  "total": 10000,
+  "isCompleted": false,
+  "errors": [
+    {
+      "lines": [15, 78, 156],
+      "message": "Invalid email format"
+    },
+    {
+      "lines": [42, 203],
+      "message": "Missing phone number"
+    }
+  ],
+  "warnings": [
+    {
+      "lines": [8, 23, 89, 134],
+      "message": "Deprecated field: fax"
+    },
+    {
+      "lines": [67, 178],
+      "message": "Large age value"
+    }
+  ]
+}
+```
+
+**Consolidation Benefits:**
+- **Storage Efficiency**: 7 original messages reduced to 4 consolidated entries
+- **Pattern Recognition**: Easily identify the most common validation issues
+- **Line Preservation**: All original line numbers maintained for debugging
+- **Automatic Processing**: No client-side logic required
+- **Better Analytics**: Simplified error reporting and analysis
+
+**Input Summary:**
+- 5 total error instances → 2 consolidated error types
+- 6 total warning instances → 2 consolidated warning types
+- All 11 line numbers preserved in appropriate `lines` arrays
+
+---
+
 ## 🚨 Error Scenarios
 
 ### Missing Client KRN
@@ -595,13 +696,13 @@ curl -X POST http://localhost:8081/progress \
   "updatedAt": "2024-01-15T10:15:00Z",
   "errors": [
     {
-      "line": 123,
+      "lines": [123],
       "message": "Invalid format"
     }
   ],
   "warnings": [
     {
-      "line": 456,
+      "lines": [456],
       "message": "Deprecated field"
     }
   ]

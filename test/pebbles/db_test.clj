@@ -6,15 +6,32 @@
    [monger.collection :as mc]))
 
 (def test-db (atom nil))
+(def test-container (atom nil))
 
 (defn db-fixture [f]
-  (let [db-map (test-utils/fresh-db)]
+  (let [db-map (if @test-container
+                 ;; Reuse existing container, just clear data
+                 (test-utils/reuse-db @test-container)
+                 ;; First time, create new container
+                 (let [fresh-map (test-utils/fresh-db)]
+                   (reset! test-container fresh-map)
+                   fresh-map))]
     (reset! test-db (:db db-map))
     (try
       (f)
       (finally
-        (test-utils/cleanup-db db-map)))))
+        ;; Clear collections but keep container running
+        (test-utils/clear-collections (:db db-map))))))
 
+(defn final-cleanup [f]
+  (try
+    (f)
+    (finally
+      (when @test-container
+        (test-utils/cleanup-db @test-container)
+        (reset! test-container nil)))))
+
+(use-fixtures :once final-cleanup)
 (use-fixtures :each db-fixture)
 
 (deftest find-progress-test
@@ -93,13 +110,59 @@
       (is (= 2 (count (:errors result))))
       (is (= 1 (count (:warnings result))))
       
-      ;; Verify errors and warnings were saved
+      ;; Verify errors and warnings were saved with consolidated structure
       (let [saved (db/find-progress @test-db "krn:clnt:test-client" "errors.csv" "test@example.com")]
         (is (= 2 (count (:errors saved))))
         (is (= "Error 1" (get-in saved [:errors 0 :message])))
-        (is (= 10 (get-in saved [:errors 0 :line])))
+        (is (= [10] (get-in saved [:errors 0 :lines])))
+        (is (= "Error 2" (get-in saved [:errors 1 :message])))
+        (is (= [20] (get-in saved [:errors 1 :lines])))
         (is (= 1 (count (:warnings saved))))
-        (is (= "Warning 1" (get-in saved [:warnings 0 :message])))))))
+        (is (= "Warning 1" (get-in saved [:warnings 0 :message])))
+        (is (= [5] (get-in saved [:warnings 0 :lines]))))))
+  
+  (testing "Create progress with duplicate error messages consolidates lines"
+    (let [progress-data {:clientKrn "krn:clnt:test-client"
+                        :filename "duplicates.csv"
+                        :email "test@example.com"
+                        :counts {:done 3 :warn 2 :failed 3}
+                        :errors [{:line 10 :message "Duplicate error"}
+                                {:line 20 :message "Unique error"}
+                                {:line 30 :message "Duplicate error"}
+                                {:line 40 :message "Duplicate error"}]
+                        :warnings [{:line 5 :message "Duplicate warning"}
+                                  {:line 15 :message "Duplicate warning"}]
+                        :isCompleted false
+                        :createdAt "2024-01-01T00:00:00Z"}
+          result (db/create-progress @test-db progress-data)]
+      
+      ;; Verify consolidation happened
+      (let [saved (db/find-progress @test-db "krn:clnt:test-client" "duplicates.csv" "test@example.com")]
+        ;; Should have 2 unique error messages (consolidated from 4 original)
+        (is (= 2 (count (:errors saved))))
+        ;; Should have 1 unique warning message (consolidated from 2 original)
+        (is (= 1 (count (:warnings saved))))
+        
+        ;; Find the consolidated duplicate error
+        (let [duplicate-error (->> (:errors saved)
+                                  (filter #(= "Duplicate error" (:message %)))
+                                  first)]
+          (is (not (nil? duplicate-error)))
+          (is (= "Duplicate error" (:message duplicate-error)))
+          (is (= [10 30 40] (sort (:lines duplicate-error)))))
+        
+        ;; Find the unique error
+        (let [unique-error (->> (:errors saved)
+                               (filter #(= "Unique error" (:message %)))
+                               first)]
+          (is (not (nil? unique-error)))
+          (is (= "Unique error" (:message unique-error)))
+          (is (= [20] (:lines unique-error))))
+        
+        ;; Check consolidated warning
+        (let [warning (first (:warnings saved))]
+          (is (= "Duplicate warning" (:message warning)))
+          (is (= [5 15] (sort (:lines warning)))))))))
 
 (deftest update-progress-test
   (testing "Update existing progress"

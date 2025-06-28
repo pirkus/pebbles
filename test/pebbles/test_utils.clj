@@ -36,12 +36,24 @@
       ;; Return a map with db and container reference for cleanup
       {:db db :container container :conn conn})))
 
+(defn clear-collections
+  "Clear all collections in the database" 
+  [db] 
+  (doseq [coll-name (mdb/get-collection-names db)]
+    (mc/drop db coll-name)))
+
+(defn reuse-db 
+  "Reuse existing database connection, just clear collections"
+  [existing-db-map] 
+  (let [{:keys [db]} existing-db-map]
+    (clear-collections db)
+    existing-db-map))
+
 (defn cleanup-db [db-map]
   (let [{:keys [container conn db]} db-map]
     (when use-existing-mongo
       ;; Clear all collections after test
-      (doseq [coll-name (mdb/get-collection-names db)]
-        (mc/drop db coll-name)))
+      (clear-collections db))
     (when conn (mg/disconnect conn))
     (when container (.stop container))))
 

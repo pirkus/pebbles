@@ -26,7 +26,7 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 
 ### Progress Tracking
 - **Incremental Updates**: Counts accumulate across multiple updates (supports distributed processing)
-- **Error/Warning Accumulation**: Detailed tracking with line numbers and messages
+- **Error/Warning Consolidation**: Duplicate error/warning messages are automatically consolidated with combined line numbers
 - **Total Discovery**: Total can be set initially or discovered during processing
 - **Real-time Status**: Updated timestamps and completion status
 
@@ -60,19 +60,19 @@ Create or update progress for a file within a client tenant. Only authenticated 
   },
   "total": 2000,        // Optional, can be set/updated on any request
   "isLast": false,      // Optional, set to true to mark as complete
-  "errors": [           // Optional, accumulated across all updates
+  "errors": [           // Optional, consolidated across all updates
     {
-      "line": 45,
+      "lines": [45],
       "message": "Invalid date format: '13/45/2024'"
     },
     {
-      "line": 67,
+      "lines": [67],
       "message": "Missing required field: customer_email"
     }
   ],
-  "warnings": [         // Optional, accumulated across all updates
+  "warnings": [         // Optional, consolidated across all updates
     {
-      "line": 23,
+      "lines": [23],
       "message": "Deprecated field 'phone_number' used"
     }
   ]
@@ -94,17 +94,17 @@ Create or update progress for a file within a client tenant. Only authenticated 
   "isCompleted": false,
   "errors": [
     {
-      "line": 45,
+      "lines": [45],
       "message": "Invalid date format: '13/45/2024'"
     },
     {
-      "line": 67,
+      "lines": [67],
       "message": "Missing required field: customer_email"
     }
   ],
   "warnings": [
     {
-      "line": 23,
+      "lines": [23],
       "message": "Deprecated field 'phone_number' used"
     }
   ]
@@ -163,13 +163,13 @@ Returns all files being processed by the specified user within the client tenant
   "updatedAt": "2024-01-15T09:15:00Z",
   "errors": [
     {
-      "line": 45,
+      "lines": [45],
       "message": "Invalid date format"
     }
   ],
   "warnings": [
     {
-      "line": 23,
+      "lines": [23],
       "message": "Deprecated field used"
     }
   ]
@@ -215,6 +215,51 @@ Simple health check endpoint.
 ```
 OK
 ```
+
+## Error and Warning Consolidation
+
+Pebbles automatically consolidates duplicate error and warning messages to optimize storage and improve readability. When multiple errors or warnings have the same message, they are grouped together with all their line numbers combined into a `lines` array.
+
+**Example Input (multiple updates with duplicate messages):**
+```json
+// First update
+{
+  "errors": [
+    {"line": 10, "message": "Missing required field"},
+    {"line": 25, "message": "Invalid format"}
+  ]
+}
+
+// Second update  
+{
+  "errors": [
+    {"line": 30, "message": "Missing required field"},
+    {"line": 40, "message": "Missing required field"}
+  ]
+}
+```
+
+**Consolidated Output:**
+```json
+{
+  "errors": [
+    {
+      "lines": [10, 30, 40],
+      "message": "Missing required field"
+    },
+    {
+      "lines": [25], 
+      "message": "Invalid format"
+    }
+  ]
+}
+```
+
+**Benefits:**
+- **Reduced Storage**: Eliminates duplicate error/warning messages
+- **Better Overview**: Easily see all line numbers where the same issue occurs
+- **Maintained Context**: All line numbers are preserved for debugging
+- **Automatic**: Consolidation happens transparently during progress updates
 
 ## Common Use Cases
 

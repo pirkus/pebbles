@@ -105,59 +105,59 @@
           ;; No existing progress - create new
           (nil? existing)
           (let [new-progress {:clientKrn client-krn
-                             :filename filename
-                             :email email
-                             :counts counts
-                             :total total
-                             :isCompleted (boolean isLast)
-                             :createdAt now
-                             :updatedAt now}
+                              :filename filename
+                              :email email
+                              :counts counts
+                              :total total
+                              :isCompleted (boolean isLast)
+                              :createdAt now
+                              :updatedAt now}
                 ;; Add optional fields if present
                 new-progress (cond-> new-progress
-                              errors (assoc :errors errors)
-                              warnings (assoc :warnings warnings))
-                _ (db/create-progress db new-progress)]
+                               errors (assoc :errors errors)
+                               warnings (assoc :warnings warnings))
+                saved (db/create-progress db new-progress)]
             (http-resp/ok {:result "created" 
-                          :clientKrn client-krn
-                          :filename filename
-                          :counts counts
-                          :total total
-                          :isCompleted (boolean isLast)
-                          :errors (or errors [])
-                          :warnings (or warnings [])}))
+                           :clientKrn client-krn
+                           :filename filename
+                           :counts counts
+                           :total total
+                           :isCompleted (boolean isLast)
+                           :errors (or (:errors saved) [])
+                           :warnings (or (:warnings saved) [])}))
           
           ;; Update existing progress
           :else
           (let [;; Calculate new counts by adding to existing
                 new-counts {:done (+ (get-in existing [:counts :done] 0) done)
-                           :warn (+ (get-in existing [:counts :warn] 0) warn)
-                           :failed (+ (get-in existing [:counts :failed] 0) failed)}
-                ;; Append new errors and warnings to existing ones
-                all-errors (concat (or (:errors existing) []) (or errors []))
-                all-warnings (concat (or (:warnings existing) []) (or warnings []))
-                update-doc {"$set" {:counts new-counts
-                                 :updatedAt now
-                                 :isCompleted (boolean isLast)
-                                 :errors all-errors
-                                 :warnings all-warnings}}
-                ;; Add total if provided and not already set
-                update-doc (if (and total (nil? (:total existing)))
-                            (assoc-in update-doc ["$set" :total] total)
-                            update-doc)]
-            
-            (db/update-progress db client-krn filename email update-doc)
+                            :warn (+ (get-in existing [:counts :warn] 0) warn)
+                            :failed (+ (get-in existing [:counts :failed] 0) failed)}
+                ;; Prepare update data with new errors/warnings for consolidation
+                update-data {:counts new-counts
+                             :total (or total (:total existing))
+                             :isCompleted (boolean isLast)
+                             :updatedAt now}
+                ;; Add new errors and warnings if present (they'll be consolidated with existing ones)
+                update-data (cond-> update-data
+                              errors (assoc :errors (concat (or (:errors existing) []) errors))
+                              warnings (assoc :warnings (concat (or (:warnings existing) []) warnings)))
+                ;; Apply consolidation to the update data
+                prepared-update-data (db/prepare-progress-data update-data)
+                update-doc {"$set" prepared-update-data}
+                
+                updated (db/update-progress db client-krn filename email update-doc)]
             (http-resp/ok {:result "updated"
-                          :clientKrn client-krn
-                          :filename filename
-                          :counts new-counts
-                          :total (or total (:total existing))
-                          :isCompleted (boolean isLast)
-                          :errors all-errors
-                          :warnings all-warnings}))))
-      
-      (catch Exception e
-        (log/error "Error updating progress:" e)
-        (http-resp/handle-db-error e)))))
+                           :clientKrn client-krn
+                           :filename filename
+                           :counts (:counts updated)
+                           :total (:total updated)
+                           :isCompleted (:isCompleted updated)
+                           :errors (or (:errors updated) [])
+                           :warnings (or (:warnings updated) [])}))))
+        
+        (catch Exception e
+          (log/error "Error updating progress:" e)
+          (http-resp/handle-db-error e)))))
 
 (defn get-progress-handler [db]
   (fn [request]

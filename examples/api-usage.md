@@ -86,17 +86,17 @@ curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
     },
     "errors": [
       {
-        "line": 150,
+        "lines": [150],
         "message": "Invalid date format: 2024-13-01"
       },
       {
-        "line": 205,
+        "lines": [205],
         "message": "Missing required field: customer_id"
       }
     ],
     "warnings": [
       {
-        "line": 88,
+        "lines": [88],
         "message": "Product code deprecated: PROD-OLD-123"
       }
     ]
@@ -118,17 +118,17 @@ Response:
   "isCompleted": false,
   "errors": [
     {
-      "line": 150,
+      "lines": [150],
       "message": "Invalid date format: 2024-13-01"
     },
     {
-      "line": 205,
+      "lines": [205],
       "message": "Missing required field: customer_id"
     }
   ],
   "warnings": [
     {
-      "line": 88,
+      "lines": [88],
       "message": "Product code deprecated: PROD-OLD-123"
     }
   ]
@@ -190,25 +190,25 @@ Response:
   "updatedAt": "2024-01-01T10:30:00Z",
   "errors": [
     {
-      "line": 150,
+      "lines": [150],
       "message": "Invalid date format: 2024-13-01"
     },
     {
-      "line": 205,
+      "lines": [205],
       "message": "Missing required field: customer_id"
     },
     {
-      "line": 312,
+      "lines": [312],
       "message": "Duplicate order ID: ORD-12345"
     }
   ],
   "warnings": [
     {
-      "line": 88,
+      "lines": [88],
       "message": "Product code deprecated: PROD-OLD-123"
     },
     {
-      "line": 195,
+      "lines": [195],
       "message": "Price exceeds normal range: $10,000"
     }
   ]
@@ -321,6 +321,101 @@ Response:
   }
 ]
 ```
+
+## Error and Warning Consolidation Example
+
+### Processing a file with duplicate validation errors
+```bash
+# First batch with some duplicate errors
+curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "user_registrations.csv",
+    "counts": {
+      "done": 1000,
+      "warn": 3,
+      "failed": 2
+    },
+    "total": 5000,
+    "errors": [
+      {"line": 10, "message": "Invalid email format"},
+      {"line": 25, "message": "Missing required field: phone"}
+    ],
+    "warnings": [
+      {"line": 5, "message": "Deprecated field: fax_number"},
+      {"line": 15, "message": "Deprecated field: fax_number"},
+      {"line": 30, "message": "Large age value: 150"}
+    ]
+  }'
+```
+
+```bash
+# Second batch with more duplicate errors
+curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "user_registrations.csv",
+    "counts": {
+      "done": 1500,
+      "warn": 2,
+      "failed": 3
+    },
+    "errors": [
+      {"line": 45, "message": "Invalid email format"},
+      {"line": 60, "message": "Invalid email format"},
+      {"line": 75, "message": "Missing required field: phone"}
+    ],
+    "warnings": [
+      {"line": 40, "message": "Deprecated field: fax_number"},
+      {"line": 55, "message": "Large age value: 150"}
+    ]
+  }'
+```
+
+Response (showing consolidated errors and warnings):
+```json
+{
+  "result": "updated",
+  "clientKrn": "krn:clnt:my-company",
+  "filename": "user_registrations.csv",
+  "counts": {
+    "done": 2500,
+    "warn": 5,
+    "failed": 5
+  },
+  "total": 5000,
+  "isCompleted": false,
+  "errors": [
+    {
+      "lines": [10, 45, 60],
+      "message": "Invalid email format"
+    },
+    {
+      "lines": [25, 75],
+      "message": "Missing required field: phone"
+    }
+  ],
+  "warnings": [
+    {
+      "lines": [5, 15, 40],
+      "message": "Deprecated field: fax_number"
+    },
+    {
+      "lines": [30, 55],
+      "message": "Large age value: 150"
+    }
+  ]
+}
+```
+
+**Notice how:**
+- 3 "Invalid email format" errors (lines 10, 45, 60) are consolidated into one entry
+- 2 "Missing required field: phone" errors (lines 25, 75) are consolidated  
+- 3 "Deprecated field: fax_number" warnings (lines 5, 15, 40) are consolidated
+- 2 "Large age value: 150" warnings (lines 30, 55) are consolidated
+- All line numbers are preserved in the `lines` arrays
 
 ## Error Examples
 

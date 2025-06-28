@@ -172,7 +172,7 @@
         
         ;; Verify specific error details
         (let [first-error (first (:errors body))]
-          (is (= 10 (:line first-error)))
+          (is (= [10] (:lines first-error)))
           (is (= "Invalid date format" (:message first-error))))
         
         ;; Verify in database
@@ -206,9 +206,9 @@
         
         ;; Verify all errors are preserved in order
         (let [errors (:errors body)]
-          (is (= 5 (:line (first errors))))
-          (is (= 50 (:line (second errors))))
-          (is (= 75 (:line (nth errors 2))))))))
+          (is (= [5] (:lines (first errors))))
+          (is (= [50] (:lines (second errors))))
+          (is (= [75] (:lines (nth errors 2))))))))
 
 (deftest get-progress-handler-test
   (let [update-handler (system/update-progress-handler @test-db)

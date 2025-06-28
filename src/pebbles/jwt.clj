@@ -1,15 +1,23 @@
 (ns pebbles.jwt
   (:require [clojure.string :as str]
-            [com.github.sikt-no.clj-jwt :as clj-jwt]))
+            [com.github.sikt-no.clj-jwt :as clj-jwt]
+            [clojure.tools.logging :as log]))
 
 (def google-jwks-url "https://www.googleapis.com/oauth2/v3/certs")
 
+;; Test mode flag - when true, skip actual JWT verification
+(def ^:dynamic *test-mode* false)
+
 (defn verify-google-jwt [token]
-  (try
-    (clj-jwt/unsign google-jwks-url token)
-    (catch Exception e
-      (println "JWT verification failed:" e)
-      nil)))
+  (if *test-mode*
+    ;; In test mode, return nil for any token (simulating invalid token)
+    nil
+    ;; Production mode - actual verification
+    (try
+      (clj-jwt/unsign google-jwks-url token)
+      (catch Exception e
+        (log/debug "JWT verification failed:" e)
+        nil))))
 
 (def auth-interceptor
   {:name ::auth
