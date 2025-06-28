@@ -86,17 +86,17 @@ curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
     },
     "errors": [
       {
-        "lines": [150],
+        "line": 150,
         "message": "Invalid date format: 2024-13-01"
       },
       {
-        "lines": [205],
+        "line": 205,
         "message": "Missing required field: customer_id"
       }
     ],
     "warnings": [
       {
-        "lines": [88],
+        "line": 88,
         "message": "Product code deprecated: PROD-OLD-123"
       }
     ]
@@ -118,18 +118,36 @@ Response:
   "isCompleted": false,
   "errors": [
     {
-      "lines": [150],
-      "message": "Invalid date format: 2024-13-01"
+      "pattern": "Invalid date format: {DATE}",
+      "lines": [
+        {
+          "line": 150,
+          "values": ["2024-13-01"]
+        }
+      ],
+      "message-count": 1
     },
     {
-      "lines": [205],
-      "message": "Missing required field: customer_id"
+      "pattern": "Missing required field: {IDENTIFIER}",
+      "lines": [
+        {
+          "line": 205,
+          "values": ["customer_id"]
+        }
+      ],
+      "message-count": 1
     }
   ],
   "warnings": [
     {
-      "lines": [88],
-      "message": "Product code deprecated: PROD-OLD-123"
+      "pattern": "Product code deprecated: {CODE}",
+      "lines": [
+        {
+          "line": 88,
+          "values": ["PROD-OLD-123"]
+        }
+      ],
+      "message-count": 1
     }
   ]
 }
@@ -190,26 +208,56 @@ Response:
   "updatedAt": "2024-01-01T10:30:00Z",
   "errors": [
     {
-      "lines": [150],
-      "message": "Invalid date format: 2024-13-01"
+      "pattern": "Invalid date format: {DATE}",
+      "lines": [
+        {
+          "line": 150,
+          "values": ["2024-13-01"]
+        }
+      ],
+      "message-count": 1
     },
     {
-      "lines": [205],
-      "message": "Missing required field: customer_id"
+      "pattern": "Missing required field: {IDENTIFIER}",
+      "lines": [
+        {
+          "line": 205,
+          "values": ["customer_id"]
+        }
+      ],
+      "message-count": 1
     },
     {
-      "lines": [312],
-      "message": "Duplicate order ID: ORD-12345"
+      "pattern": "Duplicate order ID: {ID}",
+      "lines": [
+        {
+          "line": 312,
+          "values": ["ORD-12345"]
+        }
+      ],
+      "message-count": 1
     }
   ],
   "warnings": [
     {
-      "lines": [88],
-      "message": "Product code deprecated: PROD-OLD-123"
+      "pattern": "Product code deprecated: {CODE}",
+      "lines": [
+        {
+          "line": 88,
+          "values": ["PROD-OLD-123"]
+        }
+      ],
+      "message-count": 1
     },
     {
-      "lines": [195],
-      "message": "Price exceeds normal range: $10,000"
+      "pattern": "Price exceeds normal range: {AMOUNT}",
+      "lines": [
+        {
+          "line": 195,
+          "values": ["$10,000"]
+        }
+      ],
+      "message-count": 1
     }
   ]
 }
@@ -322,11 +370,11 @@ Response:
 ]
 ```
 
-## Error and Warning Consolidation Example
+## Error and Warning Pattern Consolidation Example
 
-### Processing a file with duplicate validation errors
+### Processing a file with similar validation errors
 ```bash
-# First batch with some duplicate errors
+# First batch with validation errors
 curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -339,19 +387,19 @@ curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
     },
     "total": 5000,
     "errors": [
-      {"line": 10, "message": "Invalid email format"},
-      {"line": 25, "message": "Missing required field: phone"}
+      {"line": 10, "message": "Invalid email format: john@"},
+      {"line": 25, "message": "Missing required field 'phone'"}
     ],
     "warnings": [
-      {"line": 5, "message": "Deprecated field: fax_number"},
-      {"line": 15, "message": "Deprecated field: fax_number"},
-      {"line": 30, "message": "Large age value: 150"}
+      {"line": 5, "message": "Account 12345 will expire in 30 days"},
+      {"line": 15, "message": "Account 67890 will expire in 30 days"},
+      {"line": 30, "message": "Transaction amount $1,500.00 exceeds limit"}
     ]
   }'
 ```
 
 ```bash
-# Second batch with more duplicate errors
+# Second batch with more similar errors
 curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -363,18 +411,18 @@ curl -X POST http://localhost:8081/progress/krn:clnt:my-company \
       "failed": 3
     },
     "errors": [
-      {"line": 45, "message": "Invalid email format"},
-      {"line": 60, "message": "Invalid email format"},
-      {"line": 75, "message": "Missing required field: phone"}
+      {"line": 45, "message": "Invalid email format: @example.com"},
+      {"line": 60, "message": "Invalid email format: jane@test"},
+      {"line": 75, "message": "Missing required field 'email'"}
     ],
     "warnings": [
-      {"line": 40, "message": "Deprecated field: fax_number"},
-      {"line": 55, "message": "Large age value: 150"}
+      {"line": 40, "message": "Account 99999 will expire in 15 days"},
+      {"line": 55, "message": "Transaction amount $2,300.00 exceeds limit"}
     ]
   }'
 ```
 
-Response (showing consolidated errors and warnings):
+Response (showing pattern-based consolidation):
 ```json
 {
   "result": "updated",
@@ -389,33 +437,65 @@ Response (showing consolidated errors and warnings):
   "isCompleted": false,
   "errors": [
     {
-      "lines": [10, 45, 60],
-      "message": "Invalid email format"
+      "pattern": "Invalid email format: {EMAIL}",
+      "lines": [
+        {"line": 10, "values": ["john@"]},
+        {"line": 45, "values": ["@example.com"]},
+        {"line": 60, "values": ["jane@test"]}
+      ],
+      "message-count": 3
     },
     {
-      "lines": [25, 75],
-      "message": "Missing required field: phone"
+      "pattern": "Missing required field {QUOTED}",
+      "lines": [
+        {"line": 25, "values": ["'phone'"]},
+        {"line": 75, "values": ["'email'"]}
+      ],
+      "message-count": 2
     }
   ],
   "warnings": [
     {
-      "lines": [5, 15, 40],
-      "message": "Deprecated field: fax_number"
+      "pattern": "Account {NUMBER} will expire in {NUMBER} days",
+      "lines": [
+        {"line": 5, "values": ["12345", "30"]},
+        {"line": 15, "values": ["67890", "30"]},
+        {"line": 40, "values": ["99999", "15"]}
+      ],
+      "message-count": 3
     },
     {
-      "lines": [30, 55],
-      "message": "Large age value: 150"
+      "pattern": "Transaction amount {AMOUNT} exceeds limit",
+      "lines": [
+        {"line": 30, "values": ["$1,500.00"]},
+        {"line": 55, "values": ["$2,300.00"]}
+      ],
+      "message-count": 2
     }
   ]
 }
 ```
 
 **Notice how:**
-- 3 "Invalid email format" errors (lines 10, 45, 60) are consolidated into one entry
-- 2 "Missing required field: phone" errors (lines 25, 75) are consolidated  
-- 3 "Deprecated field: fax_number" warnings (lines 5, 15, 40) are consolidated
-- 2 "Large age value: 150" warnings (lines 30, 55) are consolidated
-- All line numbers are preserved in the `lines` arrays
+- Similar "Invalid email format" errors are grouped under one pattern with {EMAIL} placeholder
+- "Missing required field" errors are grouped with {QUOTED} placeholder
+- Account expiry warnings are grouped with {NUMBER} placeholders
+- Transaction warnings are grouped with {AMOUNT} placeholder
+- Each line number is preserved with its specific extracted values
+- The system automatically detects patterns without manual configuration
+
+## Pattern Types Recognized
+
+The statistical pattern matching automatically recognizes and groups:
+
+- **Numbers**: `123`, `456789` → `{NUMBER}`
+- **Currency**: `$1,234.56` → `{AMOUNT}`
+- **Percentages**: `95%` → `{PERCENT}`
+- **Email addresses**: `user@example.com` → `{EMAIL}`
+- **File paths**: `/var/log/app.log` → `{PATH}`
+- **File names**: `document.pdf` → `{FILENAME}`
+- **Quoted strings**: `'value'`, `"value"` → `{QUOTED}`
+- **Durations**: `30s`, `5m`, `2h` → `{DURATION}`
 
 ## Error Examples
 

@@ -220,6 +220,14 @@ OK
 
 Pebbles automatically consolidates duplicate error and warning messages to optimize storage and improve readability. When multiple errors or warnings have the same message, they are grouped together with all their line numbers combined into a `lines` array.
 
+### Statistical Pattern Matching
+
+Pebbles now includes intelligent pattern matching that groups similar messages even when they differ in data values. For example:
+- `"Invalid account number 123456"` and `"Invalid account number 789012"` → `"Invalid account number {NUMBER}"`
+- `"Missing field 'username'"` and `"Missing field 'email'"` → `"Missing field {QUOTED}"`
+
+See [STATISTICAL_PATTERN_MATCHING.md](STATISTICAL_PATTERN_MATCHING.md) for detailed documentation.
+
 **Example Input (multiple updates with duplicate messages):**
 ```json
 // First update
@@ -259,7 +267,7 @@ Pebbles automatically consolidates duplicate error and warning messages to optim
 - **Reduced Storage**: Eliminates duplicate error/warning messages
 - **Better Overview**: Easily see all line numbers where the same issue occurs
 - **Maintained Context**: All line numbers are preserved for debugging
-- **Automatic**: Consolidation happens transparently during progress updates
+- **Pattern Recognition**: Similar messages with different data values are grouped intelligently
 
 ## Common Use Cases
 

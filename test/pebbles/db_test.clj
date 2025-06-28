@@ -110,16 +110,28 @@
       (is (= 2 (count (:errors result))))
       (is (= 1 (count (:warnings result))))
       
-      ;; Verify errors and warnings were saved with consolidated structure
+      ;; Verify errors and warnings were saved with pattern-based structure
       (let [saved (db/find-progress @test-db "krn:clnt:test-client" "errors.csv" "test@example.com")]
         (is (= 2 (count (:errors saved))))
-        (is (= "Error 1" (get-in saved [:errors 0 :message])))
-        (is (= [10] (get-in saved [:errors 0 :lines])))
-        (is (= "Error 2" (get-in saved [:errors 1 :message])))
-        (is (= [20] (get-in saved [:errors 1 :lines])))
+        (is (= "Error {NUMBER}" (get-in saved [:errors 0 :pattern])))
+        ;; Check first error lines structure
+        (let [lines (get-in saved [:errors 0 :lines])]
+          (is (= 1 (count lines)))
+          (is (= 10 (get-in lines [0 :line])))
+          (is (= ["1"] (get-in lines [0 :values]))))
+        (is (= "Error {NUMBER}" (get-in saved [:errors 1 :pattern])))
+        ;; Check second error lines structure
+        (let [lines (get-in saved [:errors 1 :lines])]
+          (is (= 1 (count lines)))
+          (is (= 20 (get-in lines [0 :line])))
+          (is (= ["2"] (get-in lines [0 :values]))))
         (is (= 1 (count (:warnings saved))))
-        (is (= "Warning 1" (get-in saved [:warnings 0 :message])))
-        (is (= [5] (get-in saved [:warnings 0 :lines]))))))
+        (is (= "Warning {NUMBER}" (get-in saved [:warnings 0 :pattern])))
+        ;; Check warning lines structure
+        (let [lines (get-in saved [:warnings 0 :lines])]
+          (is (= 1 (count lines)))
+          (is (= 5 (get-in lines [0 :line])))
+          (is (= ["1"] (get-in lines [0 :values])))))))
   
   (testing "Create progress with duplicate error messages consolidates lines"
     (let [progress-data {:clientKrn "krn:clnt:test-client"
@@ -138,31 +150,37 @@
       
       ;; Verify consolidation happened
       (let [saved (db/find-progress @test-db "krn:clnt:test-client" "duplicates.csv" "test@example.com")]
-        ;; Should have 2 unique error messages (consolidated from 4 original)
+        ;; Should have 2 unique error patterns
         (is (= 2 (count (:errors saved))))
-        ;; Should have 1 unique warning message (consolidated from 2 original)
+        ;; Should have 1 unique warning pattern
         (is (= 1 (count (:warnings saved))))
         
         ;; Find the consolidated duplicate error
         (let [duplicate-error (->> (:errors saved)
-                                  (filter #(= "Duplicate error" (:message %)))
+                                  (filter #(= "Duplicate error" (:pattern %)))
                                   first)]
           (is (not (nil? duplicate-error)))
-          (is (= "Duplicate error" (:message duplicate-error)))
-          (is (= [10 30 40] (sort (:lines duplicate-error)))))
+          (is (= "Duplicate error" (:pattern duplicate-error)))
+          ;; Extract just line numbers from the lines structure
+          (let [line-numbers (map :line (:lines duplicate-error))]
+            (is (= [10 30 40] (sort line-numbers))))
+          (is (= 3 (:message-count duplicate-error))))
         
         ;; Find the unique error
         (let [unique-error (->> (:errors saved)
-                               (filter #(= "Unique error" (:message %)))
+                               (filter #(= "Unique error" (:pattern %)))
                                first)]
           (is (not (nil? unique-error)))
-          (is (= "Unique error" (:message unique-error)))
-          (is (= [20] (:lines unique-error))))
+          (is (= "Unique error" (:pattern unique-error)))
+          (is (= 20 (get-in unique-error [:lines 0 :line])))
+          (is (= 1 (:message-count unique-error))))
         
         ;; Check consolidated warning
-        (let [warning (first (:warnings saved))]
-          (is (= "Duplicate warning" (:message warning)))
-          (is (= [5 15] (sort (:lines warning)))))))))
+        (let [warning (first (:warnings saved))
+              line-numbers (map :line (:lines warning))]
+          (is (= "Duplicate warning" (:pattern warning)))
+          (is (= [5 15] (sort line-numbers)))
+          (is (= 2 (:message-count warning))))))))
 
 (deftest update-progress-test
   (testing "Update existing progress"

@@ -13,7 +13,8 @@
    [pebbles.db :as db]
    [pebbles.http-resp :as http-resp]
    [pebbles.jwt :as jwt]
-   [pebbles.specs :as specs]))
+   [pebbles.specs :as specs]
+   [pebbles.statistical-grouping :as statistical-grouping]))
 
 (def exception-handler
   (err/error-dispatch [context ex]
@@ -132,18 +133,24 @@
                 new-counts {:done (+ (get-in existing [:counts :done] 0) done)
                             :warn (+ (get-in existing [:counts :warn] 0) warn)
                             :failed (+ (get-in existing [:counts :failed] 0) failed)}
-                ;; Prepare update data with new errors/warnings for consolidation
-                update-data {:counts new-counts
-                             :total (or total (:total existing))
-                             :isCompleted (boolean isLast)
-                             :updatedAt now}
-                ;; Add new errors and warnings if present (they'll be consolidated with existing ones)
-                update-data (cond-> update-data
-                              errors (assoc :errors (concat (or (:errors existing) []) errors))
-                              warnings (assoc :warnings (concat (or (:warnings existing) []) warnings)))
-                ;; Apply consolidation to the update data
-                prepared-update-data (db/prepare-progress-data update-data)
-                update-doc {"$set" prepared-update-data}
+                ;; Use pattern-aware consolidation
+                existing-error-groups (or (:errors existing) [])
+                existing-warning-groups (or (:warnings existing) [])
+                ;; Consolidate new errors with existing patterns
+                consolidated-errors (when errors
+                                     (statistical-grouping/consolidate-with-existing-patterns
+                                      errors existing-error-groups))
+                ;; Consolidate new warnings with existing patterns  
+                consolidated-warnings (when warnings
+                                       (statistical-grouping/consolidate-with-existing-patterns
+                                        warnings existing-warning-groups))
+                ;; Prepare final update data
+                update-doc {"$set" {:counts new-counts
+                                   :total (or total (:total existing))
+                                   :isCompleted (boolean isLast)
+                                   :updatedAt now
+                                   :errors (or consolidated-errors existing-error-groups)
+                                   :warnings (or consolidated-warnings existing-warning-groups)}}
                 
                 updated (db/update-progress db client-krn filename email update-doc)]
             (http-resp/ok {:result "updated"

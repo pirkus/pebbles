@@ -1,6 +1,7 @@
 (ns pebbles.db
   (:require
-   [monger.collection :as mc]))
+   [monger.collection :as mc]
+   [pebbles.statistical-grouping :as sg]))
 
 (defn consolidate-messages
   "Consolidate errors or warnings by message, grouping line numbers into arrays"
@@ -14,12 +15,24 @@
                           vec)}))
        vec))
 
+(defn consolidate-messages-with-patterns
+  "Consolidate errors or warnings using pattern matching to group similar messages.
+   Returns grouped messages with patterns and example values."
+  [items]
+  (sg/consolidate-messages-with-patterns items))
+
 (defn prepare-progress-data
-  "Prepare progress data by consolidating duplicate error/warning messages"
-  [progress-data]
-  (cond-> progress-data
-    (:errors progress-data) (update :errors consolidate-messages)
-    (:warnings progress-data) (update :warnings consolidate-messages)))
+  "Prepare progress data by consolidating duplicate error/warning messages.
+   Uses pattern matching by default to group similar messages."
+  ([progress-data]
+   (prepare-progress-data progress-data true))
+  ([progress-data use-patterns?]
+   (let [consolidation-fn (if use-patterns? 
+                            consolidate-messages-with-patterns 
+                            consolidate-messages)]
+     (cond-> progress-data
+       (:errors progress-data) (update :errors consolidation-fn)
+       (:warnings progress-data) (update :warnings consolidation-fn)))))
 
 (defn find-progress
   "Find progress document by clientKrn, filename and email"

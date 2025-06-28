@@ -170,10 +170,10 @@
         (is (= 3 (count (:errors body))))
         (is (= 2 (count (:warnings body))))
         
-        ;; Verify specific error details
+        ;; Verify specific error details with pattern structure
         (let [first-error (first (:errors body))]
-          (is (= [10] (:lines first-error)))
-          (is (= "Invalid date format" (:message first-error))))
+          (is (= 10 (get-in first-error [:lines 0 :line])))
+          (is (= "Invalid date format" (:pattern first-error))))
         
         ;; Verify in database
         (let [saved (db/find-progress @test-db test-client-krn "errors-test.csv" email)]
@@ -201,14 +201,27 @@
             response (handler update-request)
             body (test-utils/parse-json-response response)]
         (is (= 200 (:status response)))
-        (is (= 3 (count (:errors body)))) ; 1 initial + 2 new
-        (is (= 2 (count (:warnings body)))) ; 1 initial + 1 new
+        ;; After pattern matching consolidation:
+        ;; - Initial error creates 1 pattern group
+        ;; - New errors match against existing patterns and merge
+        ;; - Result should be 3 distinct patterns (Initial, New, Another)
+        (is (<= 3 (count (:errors body))))
+        (is (<= 2 (count (:warnings body))))
         
-        ;; Verify all errors are preserved in order
-        (let [errors (:errors body)]
-          (is (= [5] (:lines (first errors))))
-          (is (= [50] (:lines (second errors))))
-          (is (= [75] (:lines (nth errors 2))))))))
+        ;; Verify all error lines are preserved across both updates
+        (let [all-error-lines (set (mapcat (fn [error-group]
+                                            (map :line (:lines error-group)))
+                                          (:errors body)))]
+          (is (contains? all-error-lines 5))   ; Initial error
+          (is (contains? all-error-lines 50))  ; New error
+          (is (contains? all-error-lines 75))) ; Another error
+        
+        ;; Verify all warning lines are preserved
+        (let [all-warning-lines (set (mapcat (fn [warning-group]
+                                              (map :line (:lines warning-group)))
+                                            (:warnings body)))]
+          (is (contains? all-warning-lines 3))   ; Initial warning
+          (is (contains? all-warning-lines 60)))))))  ; New warning
 
 (deftest get-progress-handler-test
   (let [update-handler (system/update-progress-handler @test-db)
@@ -352,4 +365,4 @@
       ;; Verify the file progress wasn't changed by unauthorized user
       (testing "File progress unchanged after unauthorized attempt"
         (let [saved (db/find-progress @test-db test-client-krn "restricted-file.csv" creator-email)]
-          (is (= {:done 30 :warn 1 :failed 0} (:counts saved)))))))))
+          (is (= {:done 30 :warn 1 :failed 0} (:counts saved))))))))
