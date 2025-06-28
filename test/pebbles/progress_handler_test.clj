@@ -1,7 +1,7 @@
 (ns pebbles.progress-handler-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [pebbles.system :as system]
+   [pebbles.handlers :as handlers]
    [pebbles.test-utils :as test-utils]
    [pebbles.db :as db]))
 
@@ -19,7 +19,7 @@
 (use-fixtures :each db-fixture)
 
 (deftest update-progress-handler-test
-  (let [handler (system/update-progress-handler @test-db)
+  (let [handler (handlers/update-progress-handler @test-db)
         email "test@example.com"
         identity {:email email}]
     
@@ -224,8 +224,8 @@
           (is (contains? all-warning-lines 60)))))))  ; New warning
 
 (deftest get-progress-handler-test
-  (let [update-handler (system/update-progress-handler @test-db)
-        get-handler (system/get-progress-handler @test-db)
+  (let [update-handler (handlers/update-progress-handler @test-db)
+        get-handler (handlers/get-progress-handler @test-db)
         email "test@example.com"
         identity {:email email}]
     
@@ -316,7 +316,7 @@
 
 (deftest authorization-test
   (testing "Only original creator can update file progress within same client"
-    (let [handler (system/update-progress-handler @test-db)
+    (let [handler (handlers/update-progress-handler @test-db)
           creator-email "creator@example.com"
           creator-identity {:email creator-email}
           other-email "other@example.com"
