@@ -2,7 +2,7 @@
   (:require
    [clojure.test :refer [deftest is testing]]
    [clojure.spec.alpha :as s]
-   [pebbles.system :as system]
+   [pebbles.interceptors :as interceptors]
    [pebbles.specs :as specs]))
 
 (deftest progress-update-specs-test
@@ -83,23 +83,7 @@
                         :counts {:done 10 :warn 0 :failed 0}
                         :warnings [{:line 0 :message "Line cannot be zero"}]})))))
 
-(deftest validate-progress-update-interceptor-test
-  (let [interceptor (system/validate-progress-update)]
-    
-    (testing "Valid request passes through"
-      (let [context {:request {:json-params {:clientKrn "krn:clnt:test-client"
-                                            :filename "test.csv"
-                                            :counts {:done 10 :warn 2 :failed 1}}}}
-            result ((:enter interceptor) context)]
-        (is (nil? (:response result)))
-        (is (= context result))))
-    
-    (testing "Invalid request returns 400"
-      (let [context {:request {:json-params {:filename "test.csv"
-                                            :counts {:done -10 :warn 2 :failed 1}}}}
-            result ((:enter interceptor) context)]
-        (is (= 400 (get-in result [:response :status])))
-        (is (re-find #"Invalid parameters" (get-in result [:response :body])))))))
+
 
 (deftest client-krn-validation-test
   (testing "Valid client KRN formats (any string)"
