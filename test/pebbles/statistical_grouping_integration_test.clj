@@ -1,4 +1,4 @@
-(ns pebbles.db-statistical-test
+(ns pebbles.statistical-grouping-integration-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
    [pebbles.db :as db]
