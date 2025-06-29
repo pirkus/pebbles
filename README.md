@@ -11,7 +11,7 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 - **Enforce authorization** - only file creators can update their files within the same tenant
 - **Lock completion** - once marked complete, no further updates allowed
 
-## Key Features
+## ✨ Key Features
 
 ### Multitenancy & Data Isolation
 - **Client KRN Support**: Every request requires a client KRN (e.g., `krn:clnt:some-opaque-string`)
@@ -34,6 +34,8 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 - **Client-User-File Isolation**: Each client-user-file combination creates a unique progress record
 - **MongoDB Storage**: Persistent storage with optimized indexes for multitenant access
 - **Functional Design**: Immutable data structures and pure functions
+
+
 
 ## Prerequisites
 

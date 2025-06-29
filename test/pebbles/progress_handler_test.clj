@@ -387,3 +387,76 @@
       (testing "File progress unchanged after unauthorized attempt"
         (let [saved (db/find-progress @test-db test-client-krn "restricted-file.csv" creator-email)]
           (is (= {:done 30 :warn 1 :failed 0} (:counts saved))))))))
+
+(deftest etag-integration-test
+  (let [handler (handlers/get-progress-handler @test-db)]
+    
+    (testing "GET /progress/{clientKrn} returns ETag header"
+      (let [test-progress {:clientKrn "krn:clnt:test-client"
+                          :filename "test.csv"
+                          :email "test@example.com"
+                          :counts {:done 100 :warn 0 :failed 0}
+                          :total 100
+                          :isCompleted false
+                          :createdAt "2024-01-01T00:00:00Z"
+                          :updatedAt "2024-01-01T00:00:00Z"}]
+        ;; Create test progress
+        (db/create-progress @test-db test-progress)
+        
+        ;; First request should return 200 with ETag
+        (let [request {:path-params {:clientKrn "krn:clnt:test-client"}
+                       :headers {}}
+              response (handler request)]
+          (is (= 200 (:status response)))
+          (is (contains? (:headers response) "ETag"))
+          (is (= "no-cache" (get-in response [:headers "Cache-Control"])))
+          (let [etag (get-in response [:headers "ETag"])]
+            (is (string? etag))
+            (is (re-matches #"\"[0-9a-f]{32}\"" etag))))))
+
+    (testing "GET /progress/{clientKrn} returns 304 when ETag matches"
+      (let [test-progress {:clientKrn "krn:clnt:test-client-2"
+                          :filename "test2.csv"
+                          :email "test2@example.com"
+                          :counts {:done 50 :warn 5 :failed 1}
+                          :total 100
+                          :isCompleted false
+                          :createdAt "2024-01-01T00:00:00Z"
+                          :updatedAt "2024-01-01T00:00:00Z"}]
+        ;; Create test progress
+        (db/create-progress @test-db test-progress)
+        
+        ;; First request to get the ETag
+        (let [request1 {:path-params {:clientKrn "krn:clnt:test-client-2"}
+                        :headers {}}
+              response1 (handler request1)
+              etag (get-in response1 [:headers "ETag"])
+          
+          ;; Second request with If-None-Match should return 304
+          request2 {:path-params {:clientKrn "krn:clnt:test-client-2"}
+                          :headers {"if-none-match" etag}}
+                response2 (handler request2)]
+            (is (= 304 (:status response2)))
+            (is (= etag (get-in response2 [:headers "ETag"])))
+            (is (= "" (:body response2))))))
+
+    (testing "GET /progress/{clientKrn}?filename=X returns ETag header"
+      (let [test-progress {:clientKrn "krn:clnt:test-client-3"
+                          :filename "specific.csv"
+                          :email "test3@example.com"
+                          :counts {:done 200 :warn 10 :failed 2}
+                          :total 250
+                          :isCompleted false
+                          :createdAt "2024-01-01T00:00:00Z"
+                          :updatedAt "2024-01-01T00:00:00Z"}]
+        ;; Create test progress
+        (db/create-progress @test-db test-progress)
+        
+        ;; Request specific file should return 200 with ETag
+        (let [request {:path-params {:clientKrn "krn:clnt:test-client-3"}
+                       :query-params {:filename "specific.csv"}
+                       :headers {}}
+              response (handler request)]
+          (is (= 200 (:status response)))
+          (is (contains? (:headers response) "ETag"))
+          (is (= "no-cache" (get-in response [:headers "Cache-Control"]))))))))

@@ -172,25 +172,27 @@
             ;; Get specific file progress by clientKrn + filename
             filename
             (if-let [progress (db/find-progress-by-filename db client-krn filename)]
-              (http-resp/ok (format-progress-response progress))
+              (http-resp/conditional-response request (format-progress-response progress))
               (http-resp/not-found "Progress not found for this file"))
 
             ;; Get all progress for specific user by clientKrn + email
             email
-            (let [user-progress (db/find-all-progress db client-krn email)]
-              (http-resp/ok (format-progress-list user-progress)))
+            (let [user-progress (db/find-all-progress db client-krn email)
+                  formatted-progress (format-progress-list user-progress)]
+              (http-resp/conditional-response request formatted-progress))
 
             ;; Get all progress for the client
             :else
-            (let [client-progress (db/find-all-progress-for-client db client-krn)]
-              (http-resp/ok (format-progress-list client-progress)))))
+            (let [client-progress (db/find-all-progress-for-client db client-krn)
+                  formatted-progress (format-progress-list client-progress)]
+              (http-resp/conditional-response request formatted-progress))))
       
       (catch Exception e
         (log/error "Error getting progress:" e)
         (http-resp/handle-db-error e))))
     ;; OpenAPI metadata
     {:get {:summary "Retrieve progress information"
-           :description "Get progress for a specific client, file, or user. No authentication required, but clientKrn is mandatory for data isolation."
+           :description "Get progress for a specific client, file, or user. No authentication required, but clientKrn is mandatory for data isolation. Supports ETag-based conditional requests for efficient polling."
            :tags ["progress"]
            :parameters [(openapi/common-parameters :filename)
                         (openapi/common-parameters :email)]
@@ -198,7 +200,10 @@
                             :content {"application/json"
                                       {:schema {:oneOf [(openapi/ref-schema "progress-record")
                                                         {:type "array"
-                                                         :items (openapi/ref-schema "progress-record")}]}}}}}}}))
+                                                         :items (openapi/ref-schema "progress-record")}]}}}}
+                       304 {:description "Not Modified - data hasn't changed since last request"}
+                       404 {:description "Progress not found"}
+                       400 {:description "Bad request - missing clientKrn"}}}}))
 
 (defn health-handler []
   (with-meta
