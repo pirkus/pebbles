@@ -160,7 +160,7 @@
         ;; Extract just line numbers from the lines structure
         (let [line-numbers (map :line (:lines duplicate-error))]
           (is (= [10 30 40] (sort line-numbers))))
-        (is (= 3 (:message-count duplicate-error))))
+        (is (= 3 (count (:lines duplicate-error)))))
 
       ;; Find the unique error
       (let [unique-error (->> (:errors saved)
@@ -169,14 +169,14 @@
         (is (not (nil? unique-error)))
         (is (= "Unique error" (:pattern unique-error)))
         (is (= 20 (get-in unique-error [:lines 0 :line])))
-        (is (= 1 (:message-count unique-error))))
+        (is (= 1 (count (:lines unique-error)))))
 
       ;; Check consolidated warning
       (let [warning (first (:warnings saved))
             line-numbers (map :line (:lines warning))]
         (is (= "Duplicate warning" (:pattern warning)))
         (is (= [5 15] (sort line-numbers)))
-        (is (= 2 (:message-count warning)))))))
+        (is (= 2 (count (:lines warning))))))))
 
 (deftest update-progress-test
   (testing "Update existing progress"

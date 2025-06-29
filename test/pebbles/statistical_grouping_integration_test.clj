@@ -56,7 +56,7 @@
         (let [line-numbers (map :line (:lines account-error))
               all-values (mapcat :values (:lines account-error))]
           (is (= [10 20 40] (sort line-numbers)))
-          (is (= 3 (:message-count account-error)))
+          (is (= 3 (count (:lines account-error))))
           (is (= #{"123456" "789012" "999999"} (set all-values))))
         
         ;; Check missing field pattern
@@ -64,7 +64,7 @@
         (let [line-numbers (map :line (:lines field-error))
               all-values (mapcat :values (:lines field-error))]
           (is (= [30 50 70] (sort line-numbers)))
-          (is (= 3 (:message-count field-error)))
+          (is (= 3 (count (:lines field-error))))
           (is (= #{"'username'" "'email'" "'password'"} (set all-values))))
         
         ;; Check transaction amount pattern
@@ -72,7 +72,7 @@
         (let [line-numbers (map :line (:lines transaction-error))
               all-values (mapcat :values (:lines transaction-error))]
           (is (= [60 80] (sort line-numbers)))
-          (is (= 2 (:message-count transaction-error)))
+          (is (= 2 (count (:lines transaction-error))))
           (is (= #{"$1,234.56" "$999.00"} (set all-values)))))))
   
   (testing "Fallback to exact matching when pattern matching disabled"
@@ -120,20 +120,20 @@
       ;; Verify file upload pattern
       (let [file-upload (first (filter #(re-find #"File upload failed" (:pattern %)) (:errors result)))]
         (when file-upload
-          (is (= 3 (:message-count file-upload)))
+          (is (= 3 (count (:lines file-upload))))
           (let [line-numbers (map :line (:lines file-upload))]
             (is (= [10 20 60] (sort line-numbers))))))
       
       ;; Verify timeout pattern
       (let [timeout (first (filter #(re-find #"timeout" (:pattern %)) (:errors result)))]
         (when timeout
-          (is (= 2 (:message-count timeout)))
+          (is (= 2 (count (:lines timeout))))
           (let [line-numbers (map :line (:lines timeout))]
             (is (= [50 70] (sort line-numbers))))))
       
       ;; Verify login attempts pattern
       (let [login (first (filter #(re-find #"login attempts" (:pattern %)) (:errors result)))]
         (when login
-          (is (= 2 (:message-count login)))
+          (is (= 2 (count (:lines login))))
           (let [line-numbers (map :line (:lines login))]
             (is (= [80 90] (sort line-numbers)))))))))

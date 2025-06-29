@@ -30,7 +30,7 @@
 
 ;; Response spec - backend returns full details including patterns
 (s/def ::error-detail-response (s/keys :req-un [::message]
-                                       :opt-un [::line ::lines ::pattern ::values]))
+                                       :opt-un [::lines ::pattern]))
 
 ;; Collections for requests and responses
 (s/def ::errors (s/coll-of ::error-detail-request))
