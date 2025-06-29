@@ -80,8 +80,8 @@ const ProgressDetails = () => {
   useEffect(() => {
     fetchProgressDetails();
     
-    // Set up polling for live updates every second
-    const interval = setInterval(fetchProgressDetails, 1000);
+    // Set up polling for live updates every 5 seconds
+    const interval = setInterval(fetchProgressDetails, 5000);
     
     return () => clearInterval(interval);
   }, [clientKrn, filename, token]);

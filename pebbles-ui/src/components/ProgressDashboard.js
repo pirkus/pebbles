@@ -94,7 +94,7 @@ const ProgressDashboard = () => {
     fetchProgressData();
     
     // Set up polling for live updates
-    const interval = setInterval(fetchProgressData, 1000); // Update every second
+    const interval = setInterval(fetchProgressData, 5000); // Update every 5 seconds
     
     return () => clearInterval(interval);
   }, [token]);
