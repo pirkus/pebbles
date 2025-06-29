@@ -45,7 +45,7 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 
 ## Quick Start
 
-### 1. Start MongoDB
+### 1. Start MongoDB and the service
 Using Docker (recommended for development):
 ```bash
 # Start MongoDB using docker-compose
@@ -54,15 +54,9 @@ docker-compose up -d
 
 Or install MongoDB locally and ensure it's running on `localhost:27017`.
 
-### 2. Run the Service
-```bash
-# Start the pebbles service
-clj -M -m pebbles.system
-```
-
 The service will start on `http://localhost:8081`.
 
-### 3. Test the API
+### 2. Test the API
 ```bash
 # Health check
 curl http://localhost:8081/health
