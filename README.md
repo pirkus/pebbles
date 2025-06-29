@@ -453,6 +453,37 @@ clj -M:test
 
 Tests use testcontainers to automatically spin up MongoDB instances.
 
+## Testing Strategy
+
+### MongoDB Connection Strategy
+Tests automatically handle MongoDB connections with a robust fallback system:
+
+1. **Local MongoDB Detection**: Automatically checks if MongoDB is running on `localhost:27017`
+2. **Environment Variable Override**: Set `USE_EXISTING_MONGO=true` to force using local MongoDB
+3. **Testcontainer Fallback**: If no local MongoDB is detected, automatically starts a Docker container
+4. **CI/CD Compatibility**: Works seamlessly in CircleCI, GitHub Actions, and other CI environments
+
+### Running Tests
+
+```bash
+# Runs with automatic MongoDB detection
+clojure -M:test
+
+# Force using local MongoDB (if available)
+USE_EXISTING_MONGO=true clojure -M:test
+
+# With custom MongoDB URI
+MONGO_URI=mongodb://localhost:27017/my-test-db clojure -M:test
+
+# Run specific test namespace
+clojure -M:test -n pebbles.statistical-grouping-integration-test
+```
+
+### CI/CD Environment Variables
+For CI systems like CircleCI, the following environment variables are recommended:
+- `TESTCONTAINERS_RYUK_DISABLED=true` - Disables Ryuk container reaper for CI
+- `TESTCONTAINERS_CHECKS_DISABLE=true` - Disables environment checks for CI
+
 ## Project Structure
 
 ```

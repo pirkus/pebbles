@@ -2,20 +2,36 @@
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
    [pebbles.db :as db]
-   [pebbles.test-utils :as test-utils]
-   [monger.core :as mg]))
+   [pebbles.test-utils :as test-utils]))
 
 (def ^:dynamic *test-db* nil)
+(def test-db-state (atom nil))
 
-(use-fixtures :each
-  (fn [f]
-    (let [conn (mg/connect)
-          db (mg/get-db conn "pebbles-test")]
-      (binding [*test-db* db]
-        (test-utils/clear-collections db)
+(defn db-fixture [f]
+  (let [db-map (if @test-db-state
+                 ;; Reuse existing container, just clear data
+                 (test-utils/reuse-db @test-db-state)
+                 ;; First time, create new container or connect to local
+                 (let [fresh-map (test-utils/fresh-db)]
+                   (reset! test-db-state fresh-map)
+                   fresh-map))]
+    (binding [*test-db* (:db db-map)]
+      (try
         (f)
-        (test-utils/clear-collections db)
-        (mg/disconnect conn)))))
+        (finally
+          ;; Clear collections but keep container running
+          (test-utils/clear-collections (:db db-map)))))))
+
+(defn final-cleanup [f]
+  (try
+    (f)
+    (finally
+      (when @test-db-state
+        (test-utils/cleanup-db @test-db-state)
+        (reset! test-db-state nil)))))
+
+(use-fixtures :once final-cleanup)
+(use-fixtures :each db-fixture)
 
 (deftest statistical-pattern-consolidation-test
   (testing "Statistical pattern matching groups similar validation messages"
