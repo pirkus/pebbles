@@ -9,7 +9,8 @@
    [pebbles.handlers :as handlers]
    [pebbles.interceptors :as interceptors]
    [pebbles.jwt :as jwt]
-   [pebbles.openapi-handlers :as openapi-handlers]))
+   [pebbles.openapi-handlers :as openapi-handlers]
+   [pebbles.sqs.consumer :as sqs-consumer]))
 
 
 
@@ -89,11 +90,25 @@
 ;; ----------------------------------------------------------------------------
 
 (defn system []
-  (component/system-map
-   :mongo (map->MongoComponent {:uri (or (System/getenv "MONGO_URI") "mongodb://localhost:27017/pebbles")})
-   :http  (component/using
-           (map->HttpComponent {:port (Integer/parseInt (or (System/getenv "PORT") "8081"))})
-           [:mongo])))
+  (let [sqs-queue-url (System/getenv "SQS_QUEUE_URL")
+        sqs-region (or (System/getenv "AWS_REGION") "us-east-1")
+        sqs-endpoint (System/getenv "SQS_ENDPOINT")]
+    (cond-> (component/system-map
+             :mongo (map->MongoComponent {:uri (or (System/getenv "MONGO_URI") "mongodb://localhost:27017/pebbles")})
+             :http  (component/using
+                     (map->HttpComponent {:port (Integer/parseInt (or (System/getenv "PORT") "8081"))})
+                     [:mongo]))
+      ;; Add SQS consumer only if queue URL is configured
+      sqs-queue-url (assoc :sqs-consumer
+                          (component/using
+                           (sqs-consumer/make-sqs-consumer
+                            :queue-url sqs-queue-url
+                            :region sqs-region
+                            :endpoint-override (when sqs-endpoint
+                                               (let [url (java.net.URL. sqs-endpoint)]
+                                                 {:hostname (.getHost url)
+                                                  :port (.getPort url)})))
+                           [:mongo])))))
 
 (defn -main [& _]
   (component/start (system)))
