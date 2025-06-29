@@ -343,12 +343,18 @@ See [STATISTICAL_PATTERN_MATCHING.md](STATISTICAL_PATTERN_MATCHING.md) for detai
 {
   "errors": [
     {
-      "lines": [10, 30, 40],
-      "pattern": "Missing required field"
+      "pattern": "Missing required field",
+      "lines": [
+        {"line": 10, "values": ["email"]},
+        {"line": 30, "values": ["phone"]},
+        {"line": 40, "values": ["address"]}
+      ]
     },
     {
-      "lines": [25], 
-      "pattern": "Invalid format"
+      "pattern": "Invalid format",
+      "lines": [
+        {"line": 25, "values": ["bad-data"]}
+      ]
     }
   ]
 }
