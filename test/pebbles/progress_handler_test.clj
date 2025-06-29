@@ -221,7 +221,29 @@
                                               (map :line (:lines warning-group)))
                                             (:warnings body)))]
           (is (contains? all-warning-lines 3))   ; Initial warning
-          (is (contains? all-warning-lines 60)))))))  ; New warning
+          (is (contains? all-warning-lines 60)))))  ; New warning
+    
+    (testing "Pattern data in request is treated as no-op - backend generates own patterns"
+      (let [request (test-utils/make-test-request
+                     {:filename "ignore-pattern-test.csv"
+                      :counts {:done 10 :warn 1 :failed 1}
+                      ;; Client sends pattern data - treated as no-op (ignored)
+                      :errors [{:line 5 :message "Invalid date" :pattern "Client sent pattern"}]
+                      :warnings [{:line 8 :message "Deprecated field" :pattern "Another client pattern"}]}
+                     :identity identity
+                     :path-params {:clientKrn test-client-krn})
+            response (handler request)
+            body (test-utils/parse-json-response response)]
+        (is (= 200 (:status response)))
+        (is (= 1 (count (:errors body))))
+        (is (= 1 (count (:warnings body))))
+        
+        ;; Verify the backend generated its own patterns from the message field
+        (let [error-pattern (:pattern (first (:errors body)))
+              warning-pattern (:pattern (first (:warnings body)))]
+          ;; Backend ignores client-sent pattern and generates own from message
+          (is (= "Invalid date" error-pattern))
+          (is (= "Deprecated field" warning-pattern)))))))
 
 (deftest get-progress-handler-test
   (let [update-handler (handlers/update-progress-handler @test-db)

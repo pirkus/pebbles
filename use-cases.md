@@ -1,5 +1,35 @@
 # 📡 API Documentation & Use Cases
 
+## 🔍 Important: Request vs Response Formats
+
+**CLIENT REQUESTS** (POST): Send individual error/warning messages:
+```json
+{
+  "errors": [
+    {"line": 45, "message": "Invalid email format: john@invalid.com"},
+    {"line": 67, "message": "Missing required field: phone_number"}
+  ]
+}
+```
+
+**API RESPONSES** (All endpoints): Return pattern-consolidated format:
+```json
+{
+  "errors": [
+    {
+      "pattern": "Invalid email format: {EMAIL}",
+      "lines": [{"line": 45, "values": ["john@invalid.com"]}]
+    },
+    {
+      "pattern": "Missing required field: {IDENTIFIER}",
+      "lines": [{"line": 67, "values": ["phone_number"]}]
+    }
+  ]
+}
+```
+
+---
+
 ## API Endpoints Overview
 
 | Method | Endpoint | Authentication | Client KRN Required | Purpose |
@@ -125,20 +155,11 @@ Content-Type: application/json
   },
   "total": 1000,
   "errors": [
-    {
-      "lines": [15],
-      "message": "Invalid email format in customer record"
-    },
-    {
-      "lines": [42],
-      "message": "Missing required field: phone_number"
-    }
+    {"line": 15, "message": "Invalid email format in customer record: john@invalid.com"},
+    {"line": 42, "message": "Missing required field: phone_number"}
   ],
   "warnings": [
-    {
-      "lines": [8],
-      "message": "Deprecated field 'fax' still in use"
-    }
+    {"line": 8, "message": "Deprecated field 'fax' still in use"}
   ]
 }
 ```
@@ -158,18 +179,24 @@ Content-Type: application/json
   "isCompleted": false,
   "errors": [
     {
-      "lines": [15],
-      "message": "Invalid email format in customer record"
+      "pattern": "Invalid email format in customer record: {EMAIL}",
+      "lines": [
+        {"line": 15, "values": ["john@invalid.com"]}
+      ]
     },
     {
-      "lines": [42],
-      "message": "Missing required field: phone_number"
+      "pattern": "Missing required field: {IDENTIFIER}",
+      "lines": [
+        {"line": 42, "values": ["phone_number"]}
+      ]
     }
   ],
   "warnings": [
     {
-      "lines": [8],
-      "message": "Deprecated field 'fax' still in use"
+      "pattern": "Deprecated field {QUOTED} still in use",
+      "lines": [
+        {"line": 8, "values": ["'fax'"]}
+      ]
     }
   ]
 }
@@ -193,16 +220,10 @@ Content-Type: application/json
     "failed": 1
   },
   "errors": [
-    {
-      "lines": [156],
-      "message": "Duplicate customer ID detected"
-    }
+    {"line": 156, "message": "Duplicate customer ID detected: CUST-12345"}
   ],
   "warnings": [
-    {
-      "lines": [134],
-      "message": "Address format differs from standard"
-    }
+    {"line": 134, "message": "Address format differs from standard"}
   ]
 }
 ```
@@ -222,26 +243,36 @@ Content-Type: application/json
   "isCompleted": false,
   "errors": [
     {
-      "lines": [15],
-      "message": "Invalid email format in customer record"
+      "pattern": "Invalid email format in customer record: {EMAIL}",
+      "lines": [
+        {"line": 15, "values": ["john@invalid"]}
+      ]
     },
     {
-      "lines": [42],
-      "message": "Missing required field: phone_number"
+      "pattern": "Missing required field: {IDENTIFIER}",
+      "lines": [
+        {"line": 42, "values": ["phone_number"]}
+      ]
     },
     {
-      "lines": [156],
-      "message": "Duplicate customer ID detected"
+      "pattern": "Duplicate customer ID detected: {ID}",
+      "lines": [
+        {"line": 156, "values": ["CUST-12345"]}
+      ]
     }
   ],
   "warnings": [
     {
-      "lines": [8],
-      "message": "Deprecated field 'fax' still in use"
+      "pattern": "Deprecated field {QUOTED} still in use",
+      "lines": [
+        {"line": 8, "values": ["'fax'"]}
+      ]
     },
     {
-      "lines": [134],
-      "message": "Address format differs from standard"
+      "pattern": "Address format differs from standard",
+      "lines": [
+        {"line": 134, "values": []}
+      ]
     }
   ]
 }
@@ -272,26 +303,36 @@ GET /progress/krn:clnt:my-company?filename=customer-data.csv
   "updatedAt": "2024-01-15T10:15:00Z",
   "errors": [
     {
-      "lines": [15],
-      "message": "Invalid email format in customer record"
+      "pattern": "Invalid email format in customer record: {EMAIL}",
+      "lines": [
+        {"line": 15, "values": ["john@invalid"]}
+      ]
     },
     {
-      "lines": [42],
-      "message": "Missing required field: phone_number"
+      "pattern": "Missing required field: {IDENTIFIER}",
+      "lines": [
+        {"line": 42, "values": ["phone_number"]}
+      ]
     },
     {
-      "lines": [156],
-      "message": "Duplicate customer ID detected"
+      "pattern": "Duplicate customer ID detected: {ID}",
+      "lines": [
+        {"line": 156, "values": ["CUST-12345"]}
+      ]
     }
   ],
   "warnings": [
     {
-      "lines": [8],
-      "message": "Deprecated field 'fax' still in use"
+      "pattern": "Deprecated field {QUOTED} still in use",
+      "lines": [
+        {"line": 8, "values": ["'fax'"]}
+      ]
     },
     {
-      "lines": [134],
-      "message": "Address format differs from standard"
+      "pattern": "Address format differs from standard",
+      "lines": [
+        {"line": 134, "values": []}
+      ]
     }
   ]
 }

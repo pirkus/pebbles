@@ -124,8 +124,7 @@ Response:
           "line": 150,
           "values": ["2024-13-01"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Missing required field: {IDENTIFIER}",
@@ -134,8 +133,7 @@ Response:
           "line": 205,
           "values": ["customer_id"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ],
   "warnings": [
@@ -146,8 +144,7 @@ Response:
           "line": 88,
           "values": ["PROD-OLD-123"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ]
 }
@@ -214,8 +211,7 @@ Response:
           "line": 150,
           "values": ["2024-13-01"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Missing required field: {IDENTIFIER}",
@@ -224,8 +220,7 @@ Response:
           "line": 205,
           "values": ["customer_id"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Duplicate order ID: {ID}",
@@ -234,8 +229,7 @@ Response:
           "line": 312,
           "values": ["ORD-12345"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ],
   "warnings": [
@@ -246,8 +240,7 @@ Response:
           "line": 88,
           "values": ["PROD-OLD-123"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Price exceeds normal range: {AMOUNT}",
@@ -256,8 +249,7 @@ Response:
           "line": 195,
           "values": ["$10,000"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ]
 }
@@ -442,16 +434,14 @@ Response (showing pattern-based consolidation):
         {"line": 10, "values": ["john@"]},
         {"line": 45, "values": ["@example.com"]},
         {"line": 60, "values": ["jane@test"]}
-      ],
-      "message-count": 3
+      ]
     },
     {
       "pattern": "Missing required field {QUOTED}",
       "lines": [
         {"line": 25, "values": ["'phone'"]},
         {"line": 75, "values": ["'email'"]}
-      ],
-      "message-count": 2
+      ]
     }
   ],
   "warnings": [
@@ -461,16 +451,14 @@ Response (showing pattern-based consolidation):
         {"line": 5, "values": ["12345", "30"]},
         {"line": 15, "values": ["67890", "30"]},
         {"line": 40, "values": ["99999", "15"]}
-      ],
-      "message-count": 3
+      ]
     },
     {
       "pattern": "Transaction amount {AMOUNT} exceeds limit",
       "lines": [
         {"line": 30, "values": ["$1,500.00"]},
         {"line": 55, "values": ["$2,300.00"]}
-      ],
-      "message-count": 2
+      ]
     }
   ]
 }
@@ -578,3 +566,34 @@ curl -X GET "http://localhost:8081/progress/krn:clnt:company-b?filename=data.csv
 ```
 
 Both clients can have files with the same name but they are completely isolated from each other!
+
+## Utility Endpoints
+
+### Health Check
+```bash
+curl -X GET http://localhost:8081/health
+```
+
+Response:
+```
+OK
+```
+
+### OpenAPI Documentation
+```bash
+# Get the complete OpenAPI 3.0 specification
+curl -X GET http://localhost:8081/openapi.json
+
+# Access interactive Swagger UI (open in browser)
+open http://localhost:8081/api-docs
+```
+
+### All Available Endpoints Summary
+
+| Method | Endpoint | Purpose | Authentication |
+|--------|----------|---------|---------------|
+| `POST` | `/progress/:clientKrn` | Create/update progress | ✅ JWT Required |
+| `GET` | `/progress/:clientKrn` | Retrieve progress | ❌ Public |
+| `GET` | `/health` | Health check | ❌ Public |
+| `GET` | `/openapi.json` | OpenAPI specification | ❌ Public |
+| `GET` | `/api-docs` | Interactive API docs | ❌ Public |

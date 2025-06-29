@@ -14,27 +14,39 @@
 (s/def ::line (s/and integer? #(> % 0)))
 (s/def ::message string?)
 
-
 ;; Enhanced error detail spec with all fields
-(s/def ::lines (s/coll-of integer?))
 (s/def ::pattern string?)
-(s/def ::message-count integer?)
-(s/def ::error-detail-full (s/keys :req-un [::message]
-                                   :opt-un [::line ::lines ::pattern ::message-count]))
+(s/def ::values (s/coll-of string?))
 
-;; Use the full error detail for collections
-(s/def ::errors (s/coll-of ::error-detail-full))
-(s/def ::warnings (s/coll-of ::error-detail-full))
+;; Line item spec for pattern-based responses
+(s/def ::line-item (s/keys :req-un [::line]
+                           :opt-un [::values]))
+(s/def ::lines (s/coll-of ::line-item))
+
+;; Separate specs for requests vs responses
+;; Request spec - clients send only message and optional line
+(s/def ::error-detail-request (s/keys :req-un [::message]
+                                      :opt-un [::line]))
+
+;; Response spec - backend returns full details including patterns
+(s/def ::error-detail-response (s/keys :req-un [::message]
+                                       :opt-un [::line ::lines ::pattern ::values]))
+
+;; Collections for requests and responses
+(s/def ::errors (s/coll-of ::error-detail-request))
+(s/def ::warnings (s/coll-of ::error-detail-request))
+(s/def ::errors-response (s/coll-of ::error-detail-response))
+(s/def ::warnings-response (s/coll-of ::error-detail-response))
 
 ;; Progress update specs
 (s/def ::total (s/nilable (s/and integer? #(> % 0))))
 (s/def ::isLast boolean?)
 
-;; Main request spec for progress update - clientKrn is now in path, not body
+;; Main request spec for progress update - uses request error specs
 (s/def ::progress-update-params (s/keys :req-un [::filename ::counts]
                                        :opt-un [::total ::isLast ::errors ::warnings]))
 
-;; Response specs
+;; Response specs - use response error specs
 (s/def ::id string?)
 (s/def ::result #{"created" "updated"})
 (s/def ::isCompleted boolean?)
@@ -48,8 +60,8 @@
 (s/def ::updatedAt iso-timestamp?)
 
 (s/def ::progress-response (s/keys :req-un [::result ::client-krn ::filename ::counts]
-                                  :opt-un [::total ::isCompleted ::errors ::warnings]))
+                                  :opt-un [::total ::isCompleted ::errors-response ::warnings-response]))
 
 (s/def ::progress-record (s/keys :req-un [::id ::client-krn ::filename ::email ::counts 
                                          ::isCompleted ::createdAt ::updatedAt]
-                                :opt-un [::total ::errors ::warnings]))
+                                :opt-un [::total ::errors-response ::warnings-response]))

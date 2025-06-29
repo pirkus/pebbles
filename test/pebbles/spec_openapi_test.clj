@@ -34,7 +34,7 @@
 
 (deftest test-collection-conversion
   (testing "Collection spec conversion"
-    (let [spec-form (s/form ::specs/errors)
+    (let [spec-form (s/form ::specs/errors-response)
           schema (spec-openapi/spec->openapi spec-form)]
       (is (= "array" (:type schema)))
       (is (contains? (:items schema) :$ref)))))
@@ -44,7 +44,7 @@
     (let [schemas (spec-openapi/specs->openapi-schemas)]
       (is (map? schemas))
       (is (contains? schemas "counts"))
-      (is (contains? schemas "error-detail-full"))
+      (is (contains? schemas "error-detail-response"))
       (is (contains? schemas "progress-update-params"))
       (is (contains? schemas "progress-response"))
       (is (contains? schemas "progress-record"))
