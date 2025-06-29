@@ -8,10 +8,10 @@ This project includes CI/CD configurations for three popular platforms:
 ## CircleCI Setup
 
 ### Prerequisites
-1. Connect your repository to CircleCI
-2. Create a context called `docker-hub-creds` with:
-   - `DOCKER_USER`: Your Docker Hub username
-   - `DOCKER_PASS`: Your Docker Hub password
+- Connect your repository to CircleCI
+- Create a context called `docker-hub-creds` with:
+  - `DOCKER_USER`: Your Docker Hub username
+  - `DOCKER_PASS`: Your Docker Hub password
 
 ### Configuration Features
 - **Test Job**: Runs Clojure tests with MongoDB via testcontainers
@@ -19,15 +19,14 @@ This project includes CI/CD configurations for three popular platforms:
 - **Deploy Job**: Pushes images to Docker Hub (main branch only)
 - **Caching**: Dependencies are cached for faster builds
 
-### File Location
-`.circleci/config.yml`
+**File Location:** `.circleci/config.yml`
 
 ## GitHub Actions Setup
 
 ### Prerequisites
-1. Add the following secrets to your repository:
-   - `DOCKER_USERNAME`: Your Docker Hub username
-   - `DOCKER_PASSWORD`: Your Docker Hub password
+Add the following secrets to your repository:
+- `DOCKER_USERNAME`: Your Docker Hub username
+- `DOCKER_PASSWORD`: Your Docker Hub password
 
 ### Configuration Features
 - **Test Job**: Runs tests with a real MongoDB service
@@ -39,14 +38,12 @@ This project includes CI/CD configurations for three popular platforms:
 - Push to `main` or `develop` branches
 - Pull requests to `main` branch
 
-### File Location
-`.github/workflows/ci.yml`
+**File Location:** `.github/workflows/ci.yml`
 
 ## GitLab CI Setup
 
 ### Prerequisites
-1. GitLab CI is automatically enabled for GitLab repositories
-2. Docker Registry is available by default
+GitLab CI is automatically enabled for GitLab repositories with Docker Registry available by default.
 
 ### Configuration Features
 - **Test Stage**: Runs tests and linting in parallel
@@ -54,70 +51,35 @@ This project includes CI/CD configurations for three popular platforms:
 - **Deploy Stage**: Manual deployment to staging/production
 - **Security Stage**: Container scanning with Trivy
 
-### Environment Variables
-The following are automatically available:
+### Auto-Available Variables
 - `CI_REGISTRY_USER`: GitLab registry username
 - `CI_REGISTRY_PASSWORD`: GitLab registry password
 - `CI_REGISTRY_IMAGE`: Full image path in GitLab registry
 
-### File Location
-`.gitlab-ci.yml`
+**File Location:** `.gitlab-ci.yml`
 
-## Common Tasks
+## Project-Specific Configuration
 
-### Running Tests Locally
+### MongoDB Testing Strategy
+All CI configurations use the automatic MongoDB detection strategy:
+- Local connection attempt first
+- Testcontainers fallback for CI environments
+- Environment variables for customization:
+  - `TESTCONTAINERS_RYUK_DISABLED=true` for CI
+  - `TESTCONTAINERS_CHECKS_DISABLE=true` for CI
+  - `USE_EXISTING_MONGO=true` to force local connection
+
+### Docker Configuration
+All platforms build from the same `Dockerfile` with:
+- Multi-stage build for optimization
+- MongoDB health checks for docker-compose
+- Port 8081 exposure for the Pebbles service
+
+### Test Requirements
 ```bash
-# With local MongoDB
-MONGO_URI=mongodb://localhost:27017/pebbles-test clojure -M:test
-
-# With Docker Compose
-docker-compose up -d mongodb
+# Specific test command for CI
 clojure -M:test
+
+# With custom MongoDB URI if needed
+MONGO_URI=mongodb://localhost:27017/pebbles-test clojure -M:test
 ```
-
-### Building Docker Image Locally
-```bash
-docker build -t pebbles:local .
-```
-
-### Testing the Docker Image
-```bash
-docker-compose up
-```
-
-## CI/CD Best Practices
-
-1. **Branch Protection**: Enable branch protection rules for `main`
-2. **Required Checks**: Make tests required before merging
-3. **Semantic Versioning**: Tag releases with semantic versions
-4. **Environment Variables**: Use CI platform secrets for sensitive data
-5. **Caching**: Cache dependencies to speed up builds
-
-## Troubleshooting
-
-### CircleCI
-- If testcontainers fail, ensure `TESTCONTAINERS_RYUK_DISABLED: true` is set
-- Check Docker layer caching is enabled in your CircleCI plan
-
-### GitHub Actions
-- MongoDB service uses `localhost` in tests, not `mongodb`
-- Use `actions/cache` for dependency caching
-
-### GitLab CI
-- Use `mongodb` as the hostname when using service containers
-- GitLab Registry requires no additional authentication setup
-
-## Security Considerations
-
-1. **Never commit secrets** to the repository
-2. **Use CI platform secret management** for credentials
-3. **Scan images** for vulnerabilities before deployment
-4. **Keep base images updated** in Dockerfile
-5. **Review dependencies** regularly for security updates
-
-## Monitoring CI/CD
-
-- Set up notifications for failed builds
-- Monitor build times and optimize if needed
-- Review test coverage reports
-- Track deployment frequency and success rate
