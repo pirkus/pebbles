@@ -216,6 +216,43 @@ Simple health check endpoint.
 OK
 ```
 
+## API Documentation (OpenAPI/Swagger)
+
+Pebbles provides interactive API documentation via OpenAPI 3.0 specification and Swagger UI.
+
+### Available Endpoints
+
+- **`/openapi.json`** - Returns the complete OpenAPI 3.0 specification in JSON format
+- **`/api-docs`** - Interactive Swagger UI for exploring and testing the API
+
+### Features
+
+- **Auto-generated Documentation**: OpenAPI schemas are automatically generated from Clojure specs
+- **Interactive Testing**: Use Swagger UI to test endpoints directly from your browser
+- **Type-safe Schemas**: Request/response schemas are derived from the same specs used for validation
+- **Always Up-to-date**: Documentation stays in sync with the actual API implementation
+
+### How It Works
+
+The OpenAPI integration uses a custom metadata-based approach:
+1. Handlers are decorated with OpenAPI metadata describing endpoints
+2. Clojure specs are automatically converted to OpenAPI schemas
+3. The system dynamically generates the OpenAPI specification from routes
+
+This ensures a single source of truth - the same specs used for validation are used for documentation.
+
+### Example Usage
+
+```bash
+# Get the OpenAPI specification
+curl http://localhost:8081/openapi.json
+
+# Access Swagger UI in your browser
+open http://localhost:8081/api-docs
+```
+
+For implementation details, see [OPENAPI_INTEGRATION.md](OPENAPI_INTEGRATION.md).
+
 ## Error and Warning Consolidation
 
 Pebbles automatically consolidates duplicate error and warning messages to optimize storage and improve readability. When multiple errors or warnings have the same message, they are grouped together with all their line numbers combined into a `lines` array.
@@ -324,6 +361,9 @@ pebbles/
 │       ├── db.clj        # Database operations (multitenant)
 │       ├── http_resp.clj # HTTP response utilities  
 │       ├── jwt.clj       # JWT authentication
+│       ├── openapi.clj   # OpenAPI spec generation
+│       ├── openapi_handlers.clj # OpenAPI/Swagger endpoint handlers
+│       ├── spec_openapi.clj # Clojure spec to OpenAPI conversion
 │       ├── specs.clj     # Request/response validation (with clientKrn)
 │       └── system.clj    # Main system components and handlers
 ├── test/
@@ -331,13 +371,16 @@ pebbles/
 │       ├── db_test.clj
 │       ├── http_resp_test.clj
 │       ├── jwt_test.clj
+│       ├── openapi_test.clj
 │       ├── progress_handler_test.clj
+│       ├── spec_openapi_test.clj
+│       ├── specs_test.clj
 │       ├── system_test.clj
-│       ├── test_utils.clj
-│       └── validation_test.clj
+│       └── test_utils.clj
 ├── examples/
 │   └── api-usage.md      # API usage examples with clientKrn
 ├── use-cases.md          # Detailed use cases and workflows for multitenancy
+├── OPENAPI_INTEGRATION.md # OpenAPI/Swagger integration details
 └── resources/
     └── simplelogger.properties
 ```

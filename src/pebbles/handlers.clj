@@ -3,7 +3,8 @@
    [clojure.tools.logging :as log]
    [pebbles.db :as db]
    [pebbles.http-resp :as http-resp]
-   [pebbles.statistical-grouping :as statistical-grouping]))
+   [pebbles.statistical-grouping :as statistical-grouping]
+   [pebbles.openapi :as openapi]))
 
 ;; ----------------------------------------------------------------------------
 ;; Validation Functions
@@ -121,58 +122,93 @@
 ;; ----------------------------------------------------------------------------
 
 (defn update-progress-handler [db]
-  (fn [request]
-    (try
-      (let [email (get-in request [:identity :email])
-            client-krn (get-in request [:path-params :clientKrn])
-            {:keys [filename counts total isLast errors warnings]} (:json-params request)
-            now (.toString (java.time.Instant/now))
-            any-existing (db/find-progress-by-filename db client-krn filename)
-            existing (db/find-progress db client-krn filename email)
-            validation-error (validate-progress-update-request email client-krn any-existing existing)]
-        (if validation-error
-          validation-error
-          (if (nil? existing)
-            (create-new-progress db client-krn filename email counts total isLast errors warnings now)
-            (update-existing-progress db client-krn filename email existing counts total isLast errors warnings now))))
+  (with-meta
+    (fn [request]
+      (try
+        (let [email (get-in request [:identity :email])
+              client-krn (get-in request [:path-params :clientKrn])
+              {:keys [filename counts total isLast errors warnings]} (:json-params request)
+              now (.toString (java.time.Instant/now))
+              any-existing (db/find-progress-by-filename db client-krn filename)
+              existing (db/find-progress db client-krn filename email)
+              validation-error (validate-progress-update-request email client-krn any-existing existing)]
+          (if validation-error
+            validation-error
+            (if (nil? existing)
+              (create-new-progress db client-krn filename email counts total isLast errors warnings now)
+              (update-existing-progress db client-krn filename email existing counts total isLast errors warnings now))))
         
         (catch Exception e
           (log/error "Error updating progress:" e)
-          (http-resp/handle-db-error e)))))
+          (http-resp/handle-db-error e))))
+    ;; OpenAPI metadata
+    {:post {:summary "Update file processing progress"
+            :description "Create or update progress for a file within a client tenant. Only authenticated users can update, and only the original creator can modify their file's progress."
+            :tags ["progress"]
+            :security [{:bearerAuth []}]
+            :requestBody {:required true
+                          :content {"application/json"
+                                    {:schema (openapi/ref-schema "progress-update-params")}}}
+            :responses {200 {:description "Progress updated successfully"
+                             :content {"application/json"
+                                       {:schema (openapi/ref-schema "progress-response")}}}
+                        201 {:description "Progress created successfully"
+                             :content {"application/json"
+                                       {:schema (openapi/ref-schema "progress-response")}}}}}}))
 
 (defn get-progress-handler [db]
-  (fn [request]
-    (try
-      (let [client-krn (get-in request [:path-params :clientKrn])
-            filename (get-in request [:query-params :filename])
-            email (get-in request [:query-params :email])]
-        
-        (cond
-          ;; No clientKrn provided
-          (nil? client-krn)
-          (http-resp/bad-request "clientKrn path parameter is required")
-          
-          ;; Get specific file progress by clientKrn + filename
-          filename
-          (if-let [progress (db/find-progress-by-filename db client-krn filename)]
-            (http-resp/ok (format-progress-response progress))
-            (http-resp/not-found "Progress not found for this file"))
-          
-          ;; Get all progress for specific user by clientKrn + email
-          email
-          (let [user-progress (db/find-all-progress db client-krn email)]
-            (http-resp/ok (format-progress-list user-progress)))
-          
-          ;; Get all progress for the client
-          :else
-          (let [client-progress (db/find-all-progress-for-client db client-krn)]
-            (http-resp/ok (format-progress-list client-progress)))))
+  (with-meta
+    (fn [request]
+      (try
+        (let [client-krn (get-in request [:path-params :clientKrn])
+              filename (get-in request [:query-params :filename])
+              email (get-in request [:query-params :email])]
+
+          (cond
+            ;; No clientKrn provided
+            (nil? client-krn)
+            (http-resp/bad-request "clientKrn path parameter is required")
+
+            ;; Get specific file progress by clientKrn + filename
+            filename
+            (if-let [progress (db/find-progress-by-filename db client-krn filename)]
+              (http-resp/ok (format-progress-response progress))
+              (http-resp/not-found "Progress not found for this file"))
+
+            ;; Get all progress for specific user by clientKrn + email
+            email
+            (let [user-progress (db/find-all-progress db client-krn email)]
+              (http-resp/ok (format-progress-list user-progress)))
+
+            ;; Get all progress for the client
+            :else
+            (let [client-progress (db/find-all-progress-for-client db client-krn)]
+              (http-resp/ok (format-progress-list client-progress)))))
       
       (catch Exception e
         (log/error "Error getting progress:" e)
-        (http-resp/handle-db-error e)))))
+        (http-resp/handle-db-error e))))
+    ;; OpenAPI metadata
+    {:get {:summary "Retrieve progress information"
+           :description "Get progress for a specific client, file, or user. No authentication required, but clientKrn is mandatory for data isolation."
+           :tags ["progress"]
+           :parameters [(openapi/common-parameters :filename)
+                        (openapi/common-parameters :email)]
+           :responses {200 {:description "Progress data retrieved"
+                            :content {"application/json"
+                                      {:schema {:oneOf [(openapi/ref-schema "progress-record")
+                                                        {:type "array"
+                                                         :items (openapi/ref-schema "progress-record")}]}}}}}}}))
 
 (defn health-handler []
-  (fn [_]
-    {:status 200
-     :body   "OK"})) 
+  (with-meta
+    (fn [_]
+      {:status 200
+       :body   "OK"})
+    ;; OpenAPI metadata
+    {:get {:summary "Health check endpoint"
+           :tags ["health"]
+           :responses {200 {:description "Service is healthy"
+                            :content {"text/plain"
+                                      {:schema {:type "string"
+                                                :example "OK"}}}}}}})) 

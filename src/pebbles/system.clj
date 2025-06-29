@@ -8,7 +8,8 @@
    [monger.core :as mg]
    [pebbles.handlers :as handlers]
    [pebbles.interceptors :as interceptors]
-   [pebbles.jwt :as jwt]))
+   [pebbles.jwt :as jwt]
+   [pebbles.openapi-handlers :as openapi-handlers]))
 
 
 
@@ -49,7 +50,15 @@
 
      ["/health" :get
       [(handlers/health-handler)]
-      :route-name :health]}))
+      :route-name :health]
+     
+     ["/openapi.json" :get
+      [(openapi-handlers/openapi-json-handler db)]
+      :route-name :openapi-spec]
+     
+     ["/api-docs" :get
+      [(openapi-handlers/swagger-ui-handler)]
+      :route-name :swagger-ui]}))
 
 ;; ----------------------------------------------------------------------------
 ;; HTTP Component
