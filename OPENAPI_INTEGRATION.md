@@ -199,8 +199,6 @@ Start your service and navigate to:
 {:MyData (spec-openapi/spec->openapi-schema ::my-data)}
 ```
 
-3. Add the route to your system - the OpenAPI spec will be automatically updated
-
 ## Implementation Details
 
 ### Metadata Extraction
@@ -219,15 +217,6 @@ The spec-to-OpenAPI converter (`spec->openapi`) uses Clojure's multimethod dispa
 2. **Recursive Conversion** - Handles nested specs and complex forms
 3. **Constraint Extraction** - Parses anonymous functions to extract numeric constraints
 4. **Type Mapping** - Maps Clojure predicates to OpenAPI types
-
-## Benefits
-
-1. **No External Dependencies** - No need for outdated libraries
-2. **Type Safety** - Schemas are defined once and referenced
-3. **Maintainability** - Documentation lives with the code
-4. **Flexibility** - Easy to extend with custom schemas and parameters
-5. **Standard Compliance** - Generates valid OpenAPI 3.0 specifications
-6. **Spec Integration** - Leverages existing Clojure specs for documentation
 
 ## Parameter Handling
 

@@ -4,7 +4,7 @@ A real-time progress tracking UI for the Pebbles project built with React and Ma
 
 ## Features
 
-- **Live Progress Updates**: Real-time updates every second for active file processing
+- **Live Progress Updates**: Real-time updates every 5 seconds for active file processing
 - **Dashboard Overview**: Quick statistics and recent activity view
 - **Detailed Progress View**: In-depth progress tracking with error and warning details
 - **Filterable List**: Search and filter progress by status, filename, or user
@@ -13,7 +13,7 @@ A real-time progress tracking UI for the Pebbles project built with React and Ma
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v18 or higher)
 - npm or yarn
 - Pebbles backend running on http://localhost:8081
 

@@ -393,7 +393,7 @@ See [use-cases.md](use-cases.md) for detailed examples including:
 Pebbles includes a modern React-based UI for monitoring progress data with real-time updates.
 
 ### UI Features
-- **Live Progress Updates**: Real-time updates every second for active file processing
+- **Live Progress Updates**: Real-time updates every 5 seconds for active file processing
 - **Dashboard Overview**: Quick statistics and recent activity view
 - **Detailed Progress View**: In-depth progress tracking with error and warning details
 - **Filterable List**: Search and filter progress by status, filename, or user
