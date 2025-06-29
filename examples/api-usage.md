@@ -124,8 +124,7 @@ Response:
           "line": 150,
           "values": ["2024-13-01"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Missing required field: {IDENTIFIER}",
@@ -134,8 +133,7 @@ Response:
           "line": 205,
           "values": ["customer_id"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ],
   "warnings": [
@@ -146,8 +144,7 @@ Response:
           "line": 88,
           "values": ["PROD-OLD-123"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ]
 }
@@ -214,8 +211,7 @@ Response:
           "line": 150,
           "values": ["2024-13-01"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Missing required field: {IDENTIFIER}",
@@ -224,8 +220,7 @@ Response:
           "line": 205,
           "values": ["customer_id"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Duplicate order ID: {ID}",
@@ -234,8 +229,7 @@ Response:
           "line": 312,
           "values": ["ORD-12345"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ],
   "warnings": [
@@ -246,8 +240,7 @@ Response:
           "line": 88,
           "values": ["PROD-OLD-123"]
         }
-      ],
-      "message-count": 1
+      ]
     },
     {
       "pattern": "Price exceeds normal range: {AMOUNT}",
@@ -256,8 +249,7 @@ Response:
           "line": 195,
           "values": ["$10,000"]
         }
-      ],
-      "message-count": 1
+      ]
     }
   ]
 }
@@ -442,16 +434,14 @@ Response (showing pattern-based consolidation):
         {"line": 10, "values": ["john@"]},
         {"line": 45, "values": ["@example.com"]},
         {"line": 60, "values": ["jane@test"]}
-      ],
-      "message-count": 3
+      ]
     },
     {
       "pattern": "Missing required field {QUOTED}",
       "lines": [
         {"line": 25, "values": ["'phone'"]},
         {"line": 75, "values": ["'email'"]}
-      ],
-      "message-count": 2
+      ]
     }
   ],
   "warnings": [
@@ -461,16 +451,14 @@ Response (showing pattern-based consolidation):
         {"line": 5, "values": ["12345", "30"]},
         {"line": 15, "values": ["67890", "30"]},
         {"line": 40, "values": ["99999", "15"]}
-      ],
-      "message-count": 3
+      ]
     },
     {
       "pattern": "Transaction amount {AMOUNT} exceeds limit",
       "lines": [
         {"line": 30, "values": ["$1,500.00"]},
         {"line": 55, "values": ["$2,300.00"]}
-      ],
-      "message-count": 2
+      ]
     }
   ]
 }
@@ -578,3 +566,168 @@ curl -X GET "http://localhost:8081/progress/krn:clnt:company-b?filename=data.csv
 ```
 
 Both clients can have files with the same name but they are completely isolated from each other!
+
+## Utility Endpoints
+
+### Health Check
+```bash
+curl -X GET http://localhost:8081/health
+```
+
+Response:
+```
+OK
+```
+
+### OpenAPI Documentation
+```bash
+# Get the complete OpenAPI 3.0 specification
+curl -X GET http://localhost:8081/openapi.json
+
+# Access interactive Swagger UI (open in browser)
+open http://localhost:8081/api-docs
+```
+
+### All Available Endpoints Summary
+
+| Method | Endpoint | Purpose | Authentication |
+|--------|----------|---------|---------------|
+| `POST` | `/progress/:clientKrn` | Create/update progress | ✅ JWT Required |
+| `GET` | `/progress/:clientKrn` | Retrieve progress | ❌ Public |
+| `GET` | `/health` | Health check | ❌ Public |
+| `GET` | `/openapi.json` | OpenAPI specification | ❌ Public |
+| `GET` | `/api-docs` | Interactive API docs | ❌ Public |
+
+## 🚀 ETag Support for Efficient Polling
+
+All GET endpoints support **ETag-based conditional requests** to significantly reduce bandwidth and improve performance when polling frequently. This is especially beneficial for UI applications that poll progress data every 1-5 seconds.
+
+### How ETags Work
+
+1. **First Request**: Server returns data with an `ETag` header containing a hash of the response data
+2. **Subsequent Requests**: Client sends `If-None-Match` header with the stored ETag value
+3. **Data Unchanged**: Server returns `304 Not Modified` with empty body (saves bandwidth)
+4. **Data Changed**: Server returns `200 OK` with new data + new ETag
+
+### Example Usage
+
+#### First Request (Gets Initial Data + ETag)
+```bash
+curl -X GET "http://localhost:8081/progress/krn:clnt:my-company" \
+  -H "Accept: application/json"
+```
+
+**Response:**
+```
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+ETag: "a1b2c3d4e5f6789012345678901234567"
+Cache-Control: no-cache
+Content-Length: 1250
+
+[
+  {
+    "id": "507f1f77bcf86cd799439011",
+    "clientKrn": "krn:clnt:my-company",
+    "filename": "sales-data.csv",
+    ...
+  }
+]
+```
+
+#### Subsequent Request (Using ETag)
+```bash
+curl -X GET "http://localhost:8081/progress/krn:clnt:my-company" \
+  -H "Accept: application/json" \
+  -H "If-None-Match: \"a1b2c3d4e5f6789012345678901234567\""
+```
+
+**Response (Data Unchanged):**
+```
+HTTP/1.1 304 Not Modified
+ETag: "a1b2c3d4e5f6789012345678901234567"
+Cache-Control: no-cache
+Content-Length: 0
+
+(empty body - saves bandwidth!)
+```
+
+**Response (Data Changed):**
+```
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+ETag: "x9y8z7w6v5u4321098765432109876543"
+Cache-Control: no-cache
+Content-Length: 1350
+
+[
+  {
+    "id": "507f1f77bcf86cd799439011",
+    "clientKrn": "krn:clnt:my-company",
+    "filename": "sales-data.csv",
+    "counts": { "done": 2000, "warn": 0, "failed": 0 }, // <- Updated!
+    ...
+  }
+]
+```
+
+### JavaScript/Frontend Implementation
+
+```javascript
+class ProgressPoller {
+  constructor(clientKrn) {
+    this.clientKrn = clientKrn;
+    this.etag = null;
+    this.data = null;
+  }
+
+  async fetchProgress() {
+    const headers = { 'Accept': 'application/json' };
+    if (this.etag) {
+      headers['If-None-Match'] = this.etag;
+    }
+
+    const response = await fetch(`/progress/${this.clientKrn}`, { headers });
+
+    if (response.status === 304) {
+      // Data unchanged, use cached data
+      console.log('Data unchanged, using cache');
+      return this.data;
+    }
+
+    if (response.status === 200) {
+      // Data changed or first request
+      this.etag = response.headers.get('ETag');
+      this.data = await response.json();
+      console.log('Data updated, new ETag:', this.etag);
+      return this.data;
+    }
+
+    throw new Error(`Unexpected response: ${response.status}`);
+  }
+
+  startPolling(intervalMs = 1000) {
+    return setInterval(() => {
+      this.fetchProgress().catch(console.error);
+    }, intervalMs);
+  }
+}
+
+// Usage
+const poller = new ProgressPoller('krn:clnt:my-company');
+const intervalId = poller.startPolling(1000); // Poll every second efficiently!
+```
+
+### Benefits
+
+- **Bandwidth Savings**: 304 responses have no body, saving significant bandwidth
+- **Reduced Server Load**: Server can quickly return 304 without re-serializing data
+- **Better Performance**: Clients avoid unnecessary JSON parsing when data is unchanged
+- **Perfect for Polling**: Ideal for UI dashboards that update frequently
+
+### Supported Endpoints
+
+All GET endpoints support ETags:
+- `GET /progress/:clientKrn` - All progress for client
+- `GET /progress/:clientKrn?filename=X` - Specific file progress
+- `GET /progress/:clientKrn?email=X` - User's progress within client

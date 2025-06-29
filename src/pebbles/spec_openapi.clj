@@ -236,7 +236,7 @@
   []
   (let [;; Define which specs to convert
         specs-to-convert [:pebbles.specs/counts
-                         :pebbles.specs/error-detail-full
+                         :pebbles.specs/error-detail-response
                          :pebbles.specs/progress-update-params
                          :pebbles.specs/progress-response
                          :pebbles.specs/progress-record]]

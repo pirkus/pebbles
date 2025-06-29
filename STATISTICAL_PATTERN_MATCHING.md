@@ -16,8 +16,7 @@ Each consolidated group preserves the exact mapping between line numbers and ext
     {"line": 10, "values": ["123456"]},
     {"line": 20, "values": ["789012"]},
     {"line": 40, "values": ["999999"]}
-  ],
-  "message-count": 3
+  ]
 }
 ```
 
@@ -88,15 +87,13 @@ When new errors/warnings are added:
       "lines": [
         {"line": 10, "values": ["123456"]},
         {"line": 20, "values": ["789012"]}
-      ],
-      "message-count": 2
+      ]
     },
     {
       "pattern": "Missing required field {QUOTED}",
       "lines": [
         {"line": 30, "values": ["'username'"]}
-      ],
-      "message-count": 1
+      ]
     }
   ]
 }
@@ -123,23 +120,20 @@ When new errors/warnings are added:
         {"line": 10, "values": ["123456"]},
         {"line": 20, "values": ["789012"]},
         {"line": 40, "values": ["999999"]}  // Merged into existing pattern
-      ],
-      "message-count": 3
+      ]
     },
     {
       "pattern": "Missing required field {QUOTED}",
       "lines": [
         {"line": 30, "values": ["'username'"]},
         {"line": 50, "values": ["'email'"]}  // Merged into existing pattern
-      ],
-      "message-count": 2
+      ]
     },
     {
       "pattern": "New error type",
       "lines": [
         {"line": 60}  // No values for exact matches
-      ],
-      "message-count": 1
+      ]
     }
   ]
 }

@@ -136,10 +136,10 @@
     (let [existing-groups [{:pattern "Invalid account number {NUMBER}"
                            :lines [{:line 10 :values ["123"]}
                                   {:line 20 :values ["456"]}]
-                           :message-count 2}
+}
                           {:pattern "System error"
                            :lines [{:line 30}]
-                           :message-count 1}]
+}]
           new-items [{:line 40 :message "Invalid account number 789"}
                     {:line 50 :message "Invalid account number 999"}
                     {:line 60 :message "New error type"}
@@ -151,7 +151,7 @@
       
       ;; Check updated account number pattern
       (let [account-group (first (filter #(re-find #"account number" (:pattern %)) result))]
-        (is (= 4 (:message-count account-group))) ; 2 existing + 2 new
+        (is (= 4 (count (:lines account-group)))) ; 2 existing + 2 new
         (let [line-numbers (map :line (:lines account-group))]
           (is (= [10 20 40 50] (sort line-numbers))))
         (let [all-values (mapcat :values (:lines account-group))]
@@ -159,7 +159,7 @@
       
       ;; Check system error group
       (let [system-group (first (filter #(= "System error" (:pattern %)) result))]
-        (is (= 2 (:message-count system-group))) ; 1 existing + 1 new
+        (is (= 2 (count (:lines system-group)))) ; 1 existing + 1 new
         (let [line-numbers (map :line (:lines system-group))]
           (is (= [30 70] (sort line-numbers)))))
       
@@ -167,7 +167,7 @@
       (let [new-group (first (filter #(= "New error type" (:pattern %)) result))]
         (is (not (nil? new-group)))
         (when new-group
-          (is (= 1 (:message-count new-group)))
+          (is (= 1 (count (:lines new-group))))
           (is (= 60 (:line (first (:lines new-group))))))))))
 
 (deftest multiple-same-type-placeholders-test

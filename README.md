@@ -1,6 +1,6 @@
 # Pebbles
 
-A multitenant file processing progress tracking service built with Clojure and MongoDB that provides real-time monitoring and secure update capabilities.
+A multitenant file processing progress tracking service built with Clojure and MongoDB that provides real-time monitoring and secure update capabilities. Now with a modern React-based UI for visualizing progress data.
 
 ## Overview
 
@@ -11,7 +11,7 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 - **Enforce authorization** - only file creators can update their files within the same tenant
 - **Lock completion** - once marked complete, no further updates allowed
 
-## Key Features
+## ✨ Key Features
 
 ### Multitenancy & Data Isolation
 - **Client KRN Support**: Every request requires a client KRN (e.g., `krn:clnt:some-opaque-string`)
@@ -35,11 +35,45 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 - **MongoDB Storage**: Persistent storage with optimized indexes for multitenant access
 - **Functional Design**: Immutable data structures and pure functions
 
+
+
 ## Prerequisites
 
 - Java 11+
 - Clojure CLI tools
 - MongoDB (or Docker for tests)
+
+## Quick Start
+
+### 1. Start MongoDB
+Using Docker (recommended for development):
+```bash
+# Start MongoDB using docker-compose
+docker-compose up -d
+```
+
+Or install MongoDB locally and ensure it's running on `localhost:27017`.
+
+### 2. Run the Service
+```bash
+# Start the pebbles service
+clj -M -m pebbles.system
+```
+
+The service will start on `http://localhost:8081`.
+
+### 3. Test the API
+```bash
+# Health check
+curl http://localhost:8081/health
+
+# View API documentation
+open http://localhost:8081/api-docs
+```
+
+### Environment Variables
+- `MONGO_URI`: MongoDB connection string (default: `mongodb://localhost:27017/pebbles`)
+- `PORT`: Service port (default: `8081`)
 
 ## API Endpoints
 
@@ -60,24 +94,26 @@ Create or update progress for a file within a client tenant. Only authenticated 
   },
   "total": 2000,        // Optional, can be set/updated on any request
   "isLast": false,      // Optional, set to true to mark as complete
-  "errors": [           // Optional, consolidated across all updates
+  "errors": [           // Optional, send individual error messages
     {
-      "lines": [45],
+      "line": 45,
       "message": "Invalid date format: '13/45/2024'"
     },
     {
-      "lines": [67],
+      "line": 67,
       "message": "Missing required field: customer_email"
     }
   ],
-  "warnings": [         // Optional, consolidated across all updates
+  "warnings": [         // Optional, send individual warning messages
     {
-      "lines": [23],
+      "line": 23,
       "message": "Deprecated field 'phone_number' used"
     }
   ]
 }
 ```
+
+**Important:** Clients should send individual error/warning messages with specific `message` text. The backend automatically groups similar messages using statistical pattern matching and generates consolidated patterns.
 
 **Response (Success):**
 ```json
@@ -94,18 +130,24 @@ Create or update progress for a file within a client tenant. Only authenticated 
   "isCompleted": false,
   "errors": [
     {
-      "lines": [45],
-      "message": "Invalid date format: '13/45/2024'"
+      "pattern": "Invalid date format: {QUOTED}",
+      "lines": [
+        {"line": 45, "values": ["'13/45/2024'"]}
+      ]
     },
     {
-      "lines": [67],
-      "message": "Missing required field: customer_email"
+      "pattern": "Missing required field: {IDENTIFIER}",
+      "lines": [
+        {"line": 67, "values": ["customer_email"]}
+      ]
     }
   ],
   "warnings": [
     {
-      "lines": [23],
-      "message": "Deprecated field 'phone_number' used"
+      "pattern": "Deprecated field {QUOTED} used",
+      "lines": [
+        {"line": 23, "values": ["'fax'"]}
+      ]
     }
   ]
 }
@@ -163,14 +205,18 @@ Returns all files being processed by the specified user within the client tenant
   "updatedAt": "2024-01-15T09:15:00Z",
   "errors": [
     {
-      "lines": [45],
-      "message": "Invalid date format"
+      "pattern": "Invalid date format: {DATE}",
+      "lines": [
+        {"line": 45, "values": ["2024-13-01"]}
+      ]
     }
   ],
   "warnings": [
     {
-      "lines": [23],
-      "message": "Deprecated field used"
+      "pattern": "Deprecated field {QUOTED} used",
+      "lines": [
+        {"line": 23, "values": ["'fax'"]}
+      ]
     }
   ]
 }
@@ -231,6 +277,7 @@ Pebbles provides interactive API documentation via OpenAPI 3.0 specification and
 - **Interactive Testing**: Use Swagger UI to test endpoints directly from your browser
 - **Type-safe Schemas**: Request/response schemas are derived from the same specs used for validation
 - **Always Up-to-date**: Documentation stays in sync with the actual API implementation
+- **Separate Request/Response Validation**: Different specs for requests vs responses ensure clients send only what they should
 
 ### How It Works
 
@@ -238,6 +285,12 @@ The OpenAPI integration uses a custom metadata-based approach:
 1. Handlers are decorated with OpenAPI metadata describing endpoints
 2. Clojure specs are automatically converted to OpenAPI schemas
 3. The system dynamically generates the OpenAPI specification from routes
+
+**Request vs Response Validation:**
+- **Request specs** (`::error-detail-request`) validate client input - only `message` and optional `line` fields allowed
+- **Response specs** (`::error-detail-response`) describe API output - includes pattern, lines with values
+- **OpenAPI schemas** use response specs to show complete API capabilities
+- **Validation** uses request specs to reject invalid client data
 
 This ensures a single source of truth - the same specs used for validation are used for documentation.
 
@@ -255,7 +308,10 @@ For implementation details, see [OPENAPI_INTEGRATION.md](OPENAPI_INTEGRATION.md)
 
 ## Error and Warning Consolidation
 
-Pebbles automatically consolidates duplicate error and warning messages to optimize storage and improve readability. When multiple errors or warnings have the same message, they are grouped together with all their line numbers combined into a `lines` array.
+Pebbles automatically consolidates duplicate error and warning messages to optimize storage and improve readability. Clients should send individual error/warning messages with the `message` field - the backend handles all pattern detection and grouping automatically.
+
+**Client Responsibility:** Send individual messages with the `message` field, like `{"line": 45, "message": "Invalid date format: '13/45/2024'"}`.
+**Backend Processing:** Automatically groups similar messages and generates patterns like `"Invalid date format: {QUOTED}"`
 
 ### Statistical Pattern Matching
 
@@ -265,9 +321,9 @@ Pebbles now includes intelligent pattern matching that groups similar messages e
 
 See [STATISTICAL_PATTERN_MATCHING.md](STATISTICAL_PATTERN_MATCHING.md) for detailed documentation.
 
-**Example Input (multiple updates with duplicate messages):**
+**Example Client Input (multiple updates with individual messages):**
 ```json
-// First update
+// First update - client sends individual messages
 {
   "errors": [
     {"line": 10, "message": "Missing required field"},
@@ -275,7 +331,7 @@ See [STATISTICAL_PATTERN_MATCHING.md](STATISTICAL_PATTERN_MATCHING.md) for detai
   ]
 }
 
-// Second update  
+// Second update - client sends more individual messages
 {
   "errors": [
     {"line": 30, "message": "Missing required field"},
@@ -284,17 +340,23 @@ See [STATISTICAL_PATTERN_MATCHING.md](STATISTICAL_PATTERN_MATCHING.md) for detai
 }
 ```
 
-**Consolidated Output:**
+**Backend Response (consolidated with patterns):**
 ```json
 {
   "errors": [
     {
-      "lines": [10, 30, 40],
-      "message": "Missing required field"
+      "pattern": "Missing required field",
+      "lines": [
+        {"line": 10, "values": ["email"]},
+        {"line": 30, "values": ["phone"]},
+        {"line": 40, "values": ["address"]}
+      ]
     },
     {
-      "lines": [25], 
-      "message": "Invalid format"
+      "pattern": "Invalid format",
+      "lines": [
+        {"line": 25, "values": ["bad-data"]}
+      ]
     }
   ]
 }
@@ -326,16 +388,58 @@ See [use-cases.md](use-cases.md) for detailed examples including:
 - Collection: `progress`
 - Indexes: Compound unique on `clientKrn + filename + email`, compound on `clientKrn + email`, single on `clientKrn`
 
+## Web UI
+
+Pebbles includes a modern React-based UI for monitoring progress data with real-time updates.
+
+### UI Features
+- **Live Progress Updates**: Real-time updates every second for active file processing
+- **Dashboard Overview**: Quick statistics and recent activity view
+- **Detailed Progress View**: In-depth progress tracking with error and warning details
+- **Filterable List**: Search and filter progress by status, filename, or user
+- **Google OAuth**: Secure authentication using Google login
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
+
+### Running the UI
+
+1. Navigate to the UI directory:
+```bash
+cd pebbles-ui
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the development server:
+```bash
+npm start
+```
+
+The UI will be available at http://localhost:3000
+
+For more details, see [pebbles-ui/README.md](pebbles-ui/README.md).
+
 ## Running the Application
 
-### Development
+### Backend Development
 ```bash
 clj -M:dev -m pebbles.system
 ```
 
-### Production
+### Backend Production
 ```bash
 clj -M -m pebbles.system
+```
+
+### Full Stack (Backend + UI)
+```bash
+# Terminal 1 - Start backend
+clj -M:dev -m pebbles.system
+
+# Terminal 2 - Start UI
+cd pebbles-ui && npm start
 ```
 
 ### Docker
@@ -350,6 +454,37 @@ clj -M:test
 ```
 
 Tests use testcontainers to automatically spin up MongoDB instances.
+
+## Testing Strategy
+
+### MongoDB Connection Strategy
+Tests automatically handle MongoDB connections with a robust fallback system:
+
+1. **Local MongoDB Detection**: Automatically checks if MongoDB is running on `localhost:27017`
+2. **Environment Variable Override**: Set `USE_EXISTING_MONGO=true` to force using local MongoDB
+3. **Testcontainer Fallback**: If no local MongoDB is detected, automatically starts a Docker container
+4. **CI/CD Compatibility**: Works seamlessly in CircleCI, GitHub Actions, and other CI environments
+
+### Running Tests
+
+```bash
+# Runs with automatic MongoDB detection
+clojure -M:test
+
+# Force using local MongoDB (if available)
+USE_EXISTING_MONGO=true clojure -M:test
+
+# With custom MongoDB URI
+MONGO_URI=mongodb://localhost:27017/my-test-db clojure -M:test
+
+# Run specific test namespace
+clojure -M:test -n pebbles.statistical-grouping-integration-test
+```
+
+### CI/CD Environment Variables
+For CI systems like CircleCI, the following environment variables are recommended:
+- `TESTCONTAINERS_RYUK_DISABLED=true` - Disables Ryuk container reaper for CI
+- `TESTCONTAINERS_CHECKS_DISABLE=true` - Disables environment checks for CI
 
 ## Project Structure
 
@@ -377,6 +512,14 @@ pebbles/
 │       ├── specs_test.clj
 │       ├── system_test.clj
 │       └── test_utils.clj
+├── pebbles-ui/           # React-based UI application
+│   ├── public/
+│   ├── src/
+│   │   ├── components/   # React components
+│   │   ├── contexts/     # React contexts
+│   │   └── App.js        # Main app with routing
+│   ├── package.json
+│   └── README.md
 ├── examples/
 │   └── api-usage.md      # API usage examples with clientKrn
 ├── use-cases.md          # Detailed use cases and workflows for multitenancy

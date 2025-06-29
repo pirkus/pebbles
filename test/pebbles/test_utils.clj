@@ -6,10 +6,19 @@
    [monger.collection :as mc])
   (:import
    (org.testcontainers.containers MongoDBContainer)
-   (org.testcontainers.utility DockerImageName)))
+   (org.testcontainers.utility DockerImageName)
+   (java.net Socket)))
 
 ;; Environment variable to use existing MongoDB instead of Testcontainers
 (def use-existing-mongo (System/getenv "USE_EXISTING_MONGO"))
+
+(defn mongodb-running?
+  "Check if MongoDB is running locally on default port"
+  [host port]
+  (try
+    (with-open [socket (Socket. host port)]
+      (.isConnected socket))
+    (catch Exception _ false)))
 
 (defn start-mongodb-container []
   (let [container (MongoDBContainer.
@@ -21,14 +30,22 @@
   (.getReplicaSetUrl container))
 
 (defn fresh-db []
-  (if use-existing-mongo
+  (if (or use-existing-mongo (mongodb-running? "localhost" 27017))
     ;; Use existing MongoDB connection
-    (let [uri (or (System/getenv "MONGO_URI") "mongodb://localhost:27017/test")
-          {:keys [conn db]} (mg/connect-via-uri uri)]
-      ;; Clear all collections in the test database
-      (doseq [coll-name (mdb/get-collection-names db)]
-        (mc/drop db coll-name))
-      {:db db :container nil :conn conn})
+    (try
+      (let [uri (or (System/getenv "MONGO_URI") "mongodb://localhost:27017/test")
+            {:keys [conn db]} (mg/connect-via-uri uri)]
+        ;; Clear all collections in the test database
+        (doseq [coll-name (mdb/get-collection-names db)]
+          (mc/drop db coll-name))
+        {:db db :container nil :conn conn})
+      (catch Exception e
+        (println "Warning: Failed to connect to local MongoDB, falling back to testcontainer:" (.getMessage e))
+        ;; Fall back to testcontainers if local connection fails
+        (let [container (start-mongodb-container)
+              uri (get-connection-string container)
+              {:keys [conn db]} (mg/connect-via-uri uri)]
+          {:db db :container container :conn conn})))
     ;; Use Testcontainers
     (let [container (start-mongodb-container)
           uri (get-connection-string container)

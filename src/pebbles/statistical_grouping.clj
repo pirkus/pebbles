@@ -206,8 +206,7 @@
                          (:members group)
                          tokenized))]
     {:pattern pattern
-     :lines line-items
-     :message-count (count (:members group))}))
+     :lines line-items}))
 
 (defn group-similar-messages
   "Group messages by similarity"
@@ -288,7 +287,7 @@
                               {:line (:line item)
                                :values (extract-values-for-pattern pattern (:message item))})
                             items)
-                 :message-count (count items)})))))
+})))))
 
 (defn merge-groups-with-existing
   "Merge new groups with existing groups, combining line numbers and counts"
@@ -299,8 +298,7 @@
                           (fn [existing]
                             (if existing
                               {:pattern (:pattern existing)
-                               :lines (concat (:lines existing) (:lines new-group))
-                               :message-count (+ (:message-count existing) (:message-count new-group))}
+                               :lines (concat (:lines existing) (:lines new-group))}
                               new-group))))
                  all-patterns
                  new-groups))))

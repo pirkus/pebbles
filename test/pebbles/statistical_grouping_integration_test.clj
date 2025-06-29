@@ -2,20 +2,36 @@
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
    [pebbles.db :as db]
-   [pebbles.test-utils :as test-utils]
-   [monger.core :as mg]))
+   [pebbles.test-utils :as test-utils]))
 
 (def ^:dynamic *test-db* nil)
+(def test-db-state (atom nil))
 
-(use-fixtures :each
-  (fn [f]
-    (let [conn (mg/connect)
-          db (mg/get-db conn "pebbles-test")]
-      (binding [*test-db* db]
-        (test-utils/clear-collections db)
+(defn db-fixture [f]
+  (let [db-map (if @test-db-state
+                 ;; Reuse existing container, just clear data
+                 (test-utils/reuse-db @test-db-state)
+                 ;; First time, create new container or connect to local
+                 (let [fresh-map (test-utils/fresh-db)]
+                   (reset! test-db-state fresh-map)
+                   fresh-map))]
+    (binding [*test-db* (:db db-map)]
+      (try
         (f)
-        (test-utils/clear-collections db)
-        (mg/disconnect conn)))))
+        (finally
+          ;; Clear collections but keep container running
+          (test-utils/clear-collections (:db db-map)))))))
+
+(defn final-cleanup [f]
+  (try
+    (f)
+    (finally
+      (when @test-db-state
+        (test-utils/cleanup-db @test-db-state)
+        (reset! test-db-state nil)))))
+
+(use-fixtures :once final-cleanup)
+(use-fixtures :each db-fixture)
 
 (deftest statistical-pattern-consolidation-test
   (testing "Statistical pattern matching groups similar validation messages"
@@ -56,7 +72,7 @@
         (let [line-numbers (map :line (:lines account-error))
               all-values (mapcat :values (:lines account-error))]
           (is (= [10 20 40] (sort line-numbers)))
-          (is (= 3 (:message-count account-error)))
+          (is (= 3 (count (:lines account-error))))
           (is (= #{"123456" "789012" "999999"} (set all-values))))
         
         ;; Check missing field pattern
@@ -64,7 +80,7 @@
         (let [line-numbers (map :line (:lines field-error))
               all-values (mapcat :values (:lines field-error))]
           (is (= [30 50 70] (sort line-numbers)))
-          (is (= 3 (:message-count field-error)))
+          (is (= 3 (count (:lines field-error))))
           (is (= #{"'username'" "'email'" "'password'"} (set all-values))))
         
         ;; Check transaction amount pattern
@@ -72,7 +88,7 @@
         (let [line-numbers (map :line (:lines transaction-error))
               all-values (mapcat :values (:lines transaction-error))]
           (is (= [60 80] (sort line-numbers)))
-          (is (= 2 (:message-count transaction-error)))
+          (is (= 2 (count (:lines transaction-error))))
           (is (= #{"$1,234.56" "$999.00"} (set all-values)))))))
   
   (testing "Fallback to exact matching when pattern matching disabled"
@@ -92,7 +108,7 @@
       (is (= 2 (count (:errors prepared)))) ; "Invalid account number 123456" and "Invalid account number 789012"
       
       ;; Find the consolidated duplicate in prepared data
-      (let [duplicate-error (first (filter #(= "Invalid account number 123456" (:message %)) (:errors prepared)))]
+              (let [duplicate-error (first (filter #(= "Invalid account number 123456" (:pattern %)) (:errors prepared)))]
         (is (= [10 20] (sort (:lines duplicate-error))))))))
 
 (deftest real-world-validation-patterns-test
@@ -120,20 +136,20 @@
       ;; Verify file upload pattern
       (let [file-upload (first (filter #(re-find #"File upload failed" (:pattern %)) (:errors result)))]
         (when file-upload
-          (is (= 3 (:message-count file-upload)))
+          (is (= 3 (count (:lines file-upload))))
           (let [line-numbers (map :line (:lines file-upload))]
             (is (= [10 20 60] (sort line-numbers))))))
       
       ;; Verify timeout pattern
       (let [timeout (first (filter #(re-find #"timeout" (:pattern %)) (:errors result)))]
         (when timeout
-          (is (= 2 (:message-count timeout)))
+          (is (= 2 (count (:lines timeout))))
           (let [line-numbers (map :line (:lines timeout))]
             (is (= [50 70] (sort line-numbers))))))
       
       ;; Verify login attempts pattern
       (let [login (first (filter #(re-find #"login attempts" (:pattern %)) (:errors result)))]
         (when login
-          (is (= 2 (:message-count login)))
+          (is (= 2 (count (:lines login))))
           (let [line-numbers (map :line (:lines login))]
             (is (= [80 90] (sort line-numbers)))))))))

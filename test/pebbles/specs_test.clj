@@ -55,7 +55,7 @@
                          :counts {:done 10 :warn 0 :failed 0}
                          :isLast "true"})))
 
-     ;; Invalid error format - missing message (message is required in error-detail-full)
+     ;; Invalid error format - missing message (message is required in error-detail-request)
      (is (not (s/valid? ::specs/progress-update-params
                         {:filename "test.csv"
                          :counts {:done 10 :warn 0 :failed 0}
