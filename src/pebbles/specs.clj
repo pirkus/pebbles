@@ -46,6 +46,12 @@
 (s/def ::progress-update-params (s/keys :req-un [::filename ::counts]
                                        :opt-un [::total ::isLast ::errors ::warnings]))
 
+;; SQS message spec - includes all fields since there's no path params or JWT
+;; Uses camelCase field names to match JSON payload
+(s/def ::clientKrn ::client-krn)  ; alias for JSON field name
+(s/def ::sqs-progress-message (s/keys :req-un [::clientKrn ::email ::filename ::counts]
+                                     :opt-un [::total ::isLast ::errors ::warnings]))
+
 ;; Response specs - use response error specs
 (s/def ::id string?)
 (s/def ::result #{"created" "updated"})

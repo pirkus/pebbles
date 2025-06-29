@@ -149,10 +149,7 @@
             :requestBody {:required true
                           :content {"application/json"
                                     {:schema (openapi/ref-schema "progress-update-params")}}}
-            :responses {200 {:description "Progress updated successfully"
-                             :content {"application/json"
-                                       {:schema (openapi/ref-schema "progress-response")}}}
-                        201 {:description "Progress created successfully"
+            :responses {200 {:description "Progress created or updated successfully"
                              :content {"application/json"
                                        {:schema (openapi/ref-schema "progress-response")}}}}}}))
 

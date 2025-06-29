@@ -13,6 +13,9 @@
 (defn ok [body]
   (json-response 200 body))
 
+(defn created [body]
+  (json-response 201 body))
+
 (defn bad-request [message]
   (json-response 400 {:error message}))
 
