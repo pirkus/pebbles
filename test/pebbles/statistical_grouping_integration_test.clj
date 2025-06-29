@@ -92,7 +92,7 @@
       (is (= 2 (count (:errors prepared)))) ; "Invalid account number 123456" and "Invalid account number 789012"
       
       ;; Find the consolidated duplicate in prepared data
-      (let [duplicate-error (first (filter #(= "Invalid account number 123456" (:message %)) (:errors prepared)))]
+              (let [duplicate-error (first (filter #(= "Invalid account number 123456" (:pattern %)) (:errors prepared)))]
         (is (= [10 20] (sort (:lines duplicate-error))))))))
 
 (deftest real-world-validation-patterns-test

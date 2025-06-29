@@ -9,7 +9,7 @@
   (->> items
        (group-by :message)
        (map (fn [[message items]]
-              {:message message
+              {:pattern message
                :lines (->> items
                           (mapcat #(if (:lines %) (:lines %) [(:line %)]))
                           vec)}))

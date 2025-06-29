@@ -325,11 +325,10 @@ const ProgressDetails = () => {
 
                 <Tabs.Panel value="errors" pt="md">
                   {progressData.errors?.length > 0 ? (
-                    <Table.ScrollContainer minWidth={600}>
+                    <Table.ScrollContainer minWidth={500}>
                       <Table striped>
                         <Table.Thead>
                           <Table.Tr>
-                            <Table.Th>Message</Table.Th>
                             <Table.Th>Pattern</Table.Th>
                             <Table.Th>Occurrences</Table.Th>
                             <Table.Th>Lines</Table.Th>
@@ -349,13 +348,6 @@ const ProgressDetails = () => {
                                     <Table.Td>
                                       {lineIndex === 0 && (
                                         <Text size="sm" c="red" fw={500}>
-                                          {error.message || 'N/A'}
-                                        </Text>
-                                      )}
-                                    </Table.Td>
-                                    <Table.Td>
-                                      {lineIndex === 0 && (
-                                        <Text size="sm" c="red">
                                           {error.pattern || 'N/A'}
                                         </Text>
                                       )}
@@ -384,7 +376,6 @@ const ProgressDetails = () => {
                                   <Table.Tr key={`${errorIndex}-collapse`} style={{ cursor: 'pointer' }} onClick={() => setExpandedErrors(prev => ({ ...prev, [errorIndex]: false }))}>
                                     <Table.Td></Table.Td>
                                     <Table.Td></Table.Td>
-                                    <Table.Td></Table.Td>
                                     <Table.Td>
                                       <Text size="sm" c="dimmed" style={{ cursor: 'pointer' }}>
                                         (click to collapse)
@@ -401,11 +392,6 @@ const ProgressDetails = () => {
                                   <Table.Tr key={errorIndex} style={{ cursor: hasMore ? 'pointer' : 'default' }} onClick={hasMore ? () => setExpandedErrors(prev => ({ ...prev, [errorIndex]: true })) : undefined}>
                                     <Table.Td>
                                       <Text size="sm" c="red" fw={500}>
-                                        {error.message || 'N/A'}
-                                      </Text>
-                                    </Table.Td>
-                                    <Table.Td>
-                                      <Text size="sm" c="red">
                                         {error.pattern || 'N/A'}
                                       </Text>
                                     </Table.Td>
@@ -437,11 +423,6 @@ const ProgressDetails = () => {
                                 <Table.Tr key={errorIndex}>
                                   <Table.Td>
                                     <Text size="sm" c="red" fw={500}>
-                                      {error.message || 'N/A'}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Text size="sm" c="red">
                                       {error.pattern || 'N/A'}
                                     </Text>
                                   </Table.Td>
@@ -472,11 +453,10 @@ const ProgressDetails = () => {
 
                 <Tabs.Panel value="warnings" pt="md">
                   {progressData.warnings?.length > 0 ? (
-                    <Table.ScrollContainer minWidth={600}>
+                    <Table.ScrollContainer minWidth={500}>
                       <Table striped>
                         <Table.Thead>
                           <Table.Tr>
-                            <Table.Th>Message</Table.Th>
                             <Table.Th>Pattern</Table.Th>
                             <Table.Th>Occurrences</Table.Th>
                             <Table.Th>Lines</Table.Th>
@@ -496,13 +476,6 @@ const ProgressDetails = () => {
                                     <Table.Td>
                                       {lineIndex === 0 && (
                                         <Text size="sm" c="yellow" fw={500}>
-                                          {warning.message || 'N/A'}
-                                        </Text>
-                                      )}
-                                    </Table.Td>
-                                    <Table.Td>
-                                      {lineIndex === 0 && (
-                                        <Text size="sm" c="yellow">
                                           {warning.pattern || 'N/A'}
                                         </Text>
                                       )}
@@ -531,7 +504,6 @@ const ProgressDetails = () => {
                                   <Table.Tr key={`${warningIndex}-collapse`} style={{ cursor: 'pointer' }} onClick={() => setExpandedWarnings(prev => ({ ...prev, [warningIndex]: false }))}>
                                     <Table.Td></Table.Td>
                                     <Table.Td></Table.Td>
-                                    <Table.Td></Table.Td>
                                     <Table.Td>
                                       <Text size="sm" c="dimmed" style={{ cursor: 'pointer' }}>
                                         (click to collapse)
@@ -548,11 +520,6 @@ const ProgressDetails = () => {
                                   <Table.Tr key={warningIndex} style={{ cursor: hasMore ? 'pointer' : 'default' }} onClick={hasMore ? () => setExpandedWarnings(prev => ({ ...prev, [warningIndex]: true })) : undefined}>
                                     <Table.Td>
                                       <Text size="sm" c="yellow" fw={500}>
-                                        {warning.message || 'N/A'}
-                                      </Text>
-                                    </Table.Td>
-                                    <Table.Td>
-                                      <Text size="sm" c="yellow">
                                         {warning.pattern || 'N/A'}
                                       </Text>
                                     </Table.Td>
@@ -584,11 +551,6 @@ const ProgressDetails = () => {
                                 <Table.Tr key={warningIndex}>
                                   <Table.Td>
                                     <Text size="sm" c="yellow" fw={500}>
-                                      {warning.message || 'N/A'}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Text size="sm" c="yellow">
                                       {warning.pattern || 'N/A'}
                                     </Text>
                                   </Table.Td>

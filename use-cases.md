@@ -643,22 +643,22 @@ curl -X POST http://localhost:8081/progress/krn:clnt:data-validator \
   "isCompleted": false,
   "errors": [
     {
-      "lines": [15, 78, 156],
-      "message": "Invalid email format"
+      "pattern": "Invalid email format",
+      "lines": [15, 78, 156]
     },
     {
-      "lines": [42, 203],
-      "message": "Missing phone number"
+      "pattern": "Missing phone number", 
+      "lines": [42, 203]
     }
   ],
   "warnings": [
     {
-      "lines": [8, 23, 89, 134],
-      "message": "Deprecated field: fax"
+      "pattern": "Deprecated field: fax",
+      "lines": [8, 23, 89, 134]
     },
     {
-      "lines": [67, 178],
-      "message": "Large age value"
+      "pattern": "Large age value",
+      "lines": [67, 178]
     }
   ]
 }
@@ -737,14 +737,14 @@ curl -X POST http://localhost:8081/progress \
   "updatedAt": "2024-01-15T10:15:00Z",
   "errors": [
     {
-      "lines": [123],
-      "message": "Invalid format"
+      "pattern": "Invalid format",
+      "lines": [123]
     }
   ],
   "warnings": [
     {
-      "lines": [456],
-      "message": "Deprecated field"
+      "pattern": "Deprecated field", 
+      "lines": [456]
     }
   ]
 }

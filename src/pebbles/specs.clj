@@ -29,8 +29,8 @@
                                       :opt-un [::line]))
 
 ;; Response spec - backend returns full details including patterns
-(s/def ::error-detail-response (s/keys :req-un [::message]
-                                       :opt-un [::lines ::pattern]))
+(s/def ::error-detail-response (s/keys :req-un [::pattern]
+                                       :opt-un [::lines]))
 
 ;; Collections for requests and responses
 (s/def ::errors (s/coll-of ::error-detail-request))
