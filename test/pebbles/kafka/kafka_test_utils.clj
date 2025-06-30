@@ -11,6 +11,19 @@
    (java.util Properties Collections)
    (java.net Socket)))
 
+;; Configure testcontainers to prevent hanging after tests
+(defn configure-testcontainers!
+  "Configure testcontainers to disable problematic shutdown hooks"
+  []
+  ;; Disable Ryuk entirely to prevent hanging after tests
+  ;; We'll handle cleanup manually in our test fixtures
+  (System/setProperty "testcontainers.ryuk.disabled" "true")
+  
+  ;; Enable container reuse for faster development  
+  (System/setProperty "testcontainers.reuse.enable" "true")
+  
+  (log/info "Configured testcontainers: disabled Ryuk, enabled reuse - manual cleanup required"))
+
 ;; Environment variable to use existing Kafka instead of Testcontainers
 (def use-existing-kafka (System/getenv "USE_EXISTING_KAFKA"))
 
@@ -26,6 +39,8 @@
     (catch Exception _ false)))
 
 (defn start-kafka-container []
+  ;; Configure testcontainers before starting any containers
+  (configure-testcontainers!)
   (let [container (-> (KafkaContainer. (DockerImageName/parse "confluentinc/cp-kafka:7.5.0"))
                       (.withReuse true))]
     (log/info "Starting Kafka container (this may take 30-60 seconds)...")
@@ -68,12 +83,19 @@
 (defn create-test-topic
   "Create a test topic"
   [admin-client topic-name]
+  (println "DEBUG: Starting topic creation for:" topic-name)
   (try
     (let [topic (NewTopic. topic-name 1 (short 1))]
-      (.createTopics admin-client (Collections/singletonList topic))
-      (log/info "Created test topic:" topic-name)
-      topic-name)
+      (println "DEBUG: Calling .createTopics...")
+      (let [result (.createTopics admin-client (Collections/singletonList topic))]
+        (println "DEBUG: .createTopics returned, waiting for completion...")
+        ;; Wait for topic creation to complete (this was missing!)
+        (.get (.all result))
+        (println "DEBUG: Topic creation completed successfully")
+        (log/info "Created test topic:" topic-name)
+        topic-name))
     (catch Exception e
+      (println "DEBUG: Exception in create-test-topic:" (.getMessage e))
       (log/warn "Topic may already exist:" (.getMessage e))
       topic-name)))
 
@@ -106,15 +128,55 @@
        :bootstrap-servers (get-kafka-bootstrap-servers container)})))
 
 (defn cleanup-kafka
-  "Clean up Kafka test environment"
+  "Clean up Kafka test environment (manual cleanup since Ryuk is disabled)"
   [kafka-env]
-  (when-let [container (:container kafka-env)]
+  (println "DEBUG: Cleaning up Kafka test environment..." kafka-env)
+  (let [container (:container kafka-env)]
+    (println "DEBUG: Container:" container)
     (try
-      (log/info "Stopping Kafka container...")
+      (println "Stopping Kafka container manually...")
+      
+      ;; First try graceful stop
       (.stop container)
-      (log/info "Kafka container stopped")
+      (log/info "Kafka container stopped gracefully")
+      
+      ;; Force cleanup to ensure container is removed
+      (Thread/sleep 1000)
+      (when (.isRunning container)
+        (log/warn "Container still running, forcing stop...")
+        (.kill container))
+      
+      ;; Additional cleanup
+      (try
+        (.close container)
+        (catch Exception e
+          (log/debug "Container already closed:" (.getMessage e))))
+      
+      (log/info "Kafka container cleanup completed")
       (catch Exception e
-        (log/warn "Error stopping Kafka container:" (.getMessage e))))))
+        (log/warn "Error during Kafka container cleanup:" (.getMessage e))))))
+
+(defn force-cleanup
+  "Force cleanup of all resources including daemon threads"
+  []
+  (try
+    ;; Force garbage collection to clean up any remaining resources
+    (System/gc)
+    (Thread/sleep 1000)
+    ;; List and interrupt any remaining threads
+    (let [thread-group (.getThreadGroup (Thread/currentThread))
+          threads (make-array Thread (.activeCount thread-group))]
+      (.enumerate thread-group threads)
+      (doseq [thread threads]
+        (when (and thread 
+                   (.isAlive thread)
+                   (.isDaemon thread)
+                   (or (.contains (.getName thread) "kafka")
+                       (.contains (.getName thread) "testcontainers")))
+          (log/debug "Interrupting daemon thread:" (.getName thread))
+          (.interrupt thread))))
+    (catch Exception e
+      (log/warn "Error during force cleanup:" (.getMessage e)))))
 
 (defn with-kafka-env
   "Execute function with fresh Kafka environment"
@@ -128,19 +190,41 @@
 (defn create-test-setup
   "Create complete test setup with topic and producer"
   [kafka-env topic-name]
-  (let [bootstrap-servers (:bootstrap-servers kafka-env)
-        admin-client (create-kafka-admin-client bootstrap-servers)
-        producer (create-kafka-producer bootstrap-servers)]
+  (println "DEBUG: Creating test setup for topic:" topic-name)
+  (let [bootstrap-servers (:bootstrap-servers kafka-env)]
+    (println "DEBUG: Bootstrap servers:" bootstrap-servers)
+    (println "DEBUG: Creating admin client...")
+    (let [admin-client (create-kafka-admin-client bootstrap-servers)]
+      (println "DEBUG: Admin client created, creating producer...")
+      (let [producer (create-kafka-producer bootstrap-servers)]
+        (println "DEBUG: Producer created, creating topic...")
+        (try
+          (create-test-topic admin-client topic-name)
+          (println "DEBUG: Topic creation completed, returning test setup")
+          {:admin-client admin-client
+           :producer producer
+           :topic topic-name
+           :bootstrap-servers bootstrap-servers}
+          (catch Exception e
+            (println "DEBUG: Error in create-test-setup:" (.getMessage e))
+            (.close admin-client)
+            (.close producer)
+            (throw e)))))))
+
+(defn safe-close-consumer
+  "Safely close a Kafka consumer with timeout"
+  [consumer]
+  (when consumer
     (try
-      (create-test-topic admin-client topic-name)
-      {:admin-client admin-client
-       :producer producer
-       :topic topic-name
-       :bootstrap-servers bootstrap-servers}
+      (log/debug "Closing Kafka consumer...")
+      (.close consumer (java.time.Duration/ofSeconds 5))
+      (log/debug "Kafka consumer closed")
       (catch Exception e
-        (.close admin-client)
-        (.close producer)
-        (throw e)))))
+        (log/warn "Error closing consumer, forcing close:" (.getMessage e))
+        (try
+          (.close consumer)
+          (catch Exception e2
+            (log/warn "Failed to force close consumer:" (.getMessage e2))))))))
 
 (defn cleanup-test-setup
   "Clean up test setup"
