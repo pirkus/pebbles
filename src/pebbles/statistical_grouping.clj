@@ -2,11 +2,29 @@
   (:require
    [clojure.string :as str]))
 
+;; ----------------------------------------------------------------------------
+;; Regex patterns for token recognition
+;; ----------------------------------------------------------------------------
+
+(def token-patterns
+  "Regular expression patterns for identifying different types of tokens"
+  {:quoted #"(?:'[^']*'|\"[^\"]*\")"
+   :number-basic #"^\d+[A-Za-z]*$"              ; For is-likely-variable? 
+   :number-with-punct #"^\d+[A-Za-z]*[)\]]*$"   ; For normalize-token (allows trailing punctuation)
+   :number-formatted #"^[\d,.\-]+$"
+   :currency #"^\$[\d,.\-]+$"
+   :percentage #"^\d+%$"
+   :duration #"^\d+[smhd]$"
+   :alphanumeric-id #"^[a-zA-Z0-9\-_]+$"
+   :email #"@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+   :file-path #"^[/\\].*[/\\].*"
+   :filename #"^[^/\\]+\.[a-zA-Z]{2,4}$"
+   :parenthetical #"^\(.*:.*\)$"})
+
 (defn extract-quoted-strings
   "Extract all quoted strings from a message"
   [message]
-  (let [quoted-pattern #"(?:'[^']*'|\"[^\"]*\")"]
-    (re-seq quoted-pattern message)))
+  (re-seq (:quoted token-patterns) message))
 
 (defn replace-quotes-with-placeholders
   "Replace quoted strings with placeholders in the message"
@@ -57,27 +75,27 @@
   (and (string? token)
        (or
         ;; Pure numbers or numbers with units
-        (re-matches #"^\d+[A-Za-z]*$" token)
+        (re-matches (:number-basic token-patterns) token)
         ;; Numbers with formatting
-        (re-matches #"^[\d,.\-]+$" token)
+        (re-matches (:number-formatted token-patterns) token)
         ;; Currency amounts
-        (re-matches #"^\$[\d,.\-]+$" token)
+        (re-matches (:currency token-patterns) token)
         ;; Percentages
-        (re-matches #"^\d+%$" token)
+        (re-matches (:percentage token-patterns) token)
         ;; Time durations
-        (re-matches #"^\d+[smhd]$" token)
+        (re-matches (:duration token-patterns) token)
         ;; Alphanumeric IDs (must have both letters and numbers)
         (and (re-find #"\d" token)
              (re-find #"[a-zA-Z]" token)
-             (re-matches #"^[a-zA-Z0-9\-_]+$" token))
+             (re-matches (:alphanumeric-id token-patterns) token))
         ;; Email addresses
-        (re-find #"@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}" token)
+        (re-find (:email token-patterns) token)
         ;; File paths
-        (re-matches #"^[/\\].*[/\\].*" token)
+        (re-matches (:file-path token-patterns) token)
         ;; File names with extensions
-        (re-matches #"^[^/\\]+\.[a-zA-Z]{2,4}$" token)
+        (re-matches (:filename token-patterns) token)
         ;; Parenthetical info
-        (re-matches #"^\(.*:.*\)$" token))))
+        (re-matches (:parenthetical token-patterns) token))))
 
 (defn normalize-token
   "Normalize a single token based on its characteristics"
@@ -89,35 +107,35 @@
     "{QUOTED}"
     
     ;; Numbers (including with units like MB, GB, etc.) - also handle trailing punctuation
-    (re-matches #"^\d+[A-Za-z]*[)\]]*$" token)
+    (re-matches (:number-with-punct token-patterns) token)
     "{NUMBER}"
     
     ;; Currency
-    (re-matches #"^\$[\d,.\-]+$" token)
+    (re-matches (:currency token-patterns) token)
     "{AMOUNT}"
     
     ;; Percentages
-    (re-matches #"^\d+%$" token)
+    (re-matches (:percentage token-patterns) token)
     "{PERCENT}"
     
     ;; Email
-    (re-find #"@" token)
+    (re-find (:email token-patterns) token)
     "{EMAIL}"
     
     ;; File paths
-    (re-matches #"^[/\\].*[/\\].*" token)
+    (re-matches (:file-path token-patterns) token)
     "{PATH}"
     
     ;; File names
-    (re-matches #"^[^/\\]+\.[a-zA-Z]{2,4}$" token)
+    (re-matches (:filename token-patterns) token)
     "{FILENAME}"
     
     ;; Parenthetical content with colon (like "(size: 15MB)")
-    (re-matches #"^\(.*:.*\)$" token)
+    (re-matches (:parenthetical token-patterns) token)
     "{INFO}"
     
     ;; Time durations (30s, 5m, 2h, etc.)
-    (re-matches #"^\d+[smhd]$" token)
+    (re-matches (:duration token-patterns) token)
     "{DURATION}"
     
     ;; Default - keep as is
