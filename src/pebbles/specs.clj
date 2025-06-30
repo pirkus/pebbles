@@ -52,6 +52,10 @@
 (s/def ::sqs-progress-message (s/keys :req-un [::clientKrn ::email ::filename ::counts]
                                      :opt-un [::total ::isLast ::errors ::warnings]))
 
+;; Kafka message spec - same format as SQS for consistency
+(s/def ::kafka-progress-message (s/keys :req-un [::clientKrn ::email ::filename ::counts]
+                                       :opt-un [::total ::isLast ::errors ::warnings]))
+
 ;; Response specs - use response error specs
 (s/def ::id string?)
 (s/def ::result #{"created" "updated"})

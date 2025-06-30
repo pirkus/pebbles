@@ -30,7 +30,7 @@
 
 ---
 
-## API Endpoints & SQS Overview
+## API Endpoints & Message Queue Overview
 
 ### HTTP API Endpoints
 | Method | Endpoint | Authentication | Client KRN Required | Purpose |
@@ -39,15 +39,18 @@
 | `GET` | `/progress/:clientKrn` | ❌ Public | ✅ Yes (path param) | View progress data within client |
 | `GET` | `/health` | ❌ Public | ❌ No | Health check |
 
-### SQS Integration
+### Message Queue Integration
 | Input Method | Authentication | Client KRN Required | Purpose |
 |--------------|----------------|---------------------|---------|
-| **SQS Messages** | ❌ Not Required | ✅ Yes (in message payload) | Asynchronous progress updates via message queue |
+| **SQS Messages** | ❌ Not Required | ✅ Yes (in message payload) | Asynchronous progress updates via AWS SQS |
+| **Kafka Messages** | ❌ Not Required | ✅ Yes (in message payload) | Asynchronous progress updates via Apache Kafka |
 
-**Benefits of SQS Integration:**
+**Benefits of Message Queue Integration:**
 - 🚀 **Asynchronous Processing**: No need to wait for HTTP responses
-- 🛡️ **Reliability**: Built-in retry mechanism and dead letter queues
+- 🛡️ **Reliability**: Built-in retry mechanism and dead letter handling
 - 📈 **Scalability**: Handle high-volume progress updates without blocking
+- 🔄 **Dual Support**: Choose SQS, Kafka, or both based on your infrastructure
+- ⚡ **High Throughput**: Kafka provides extremely high-throughput message processing
 
 ---
 
@@ -80,31 +83,34 @@ sequenceDiagram
     A->>C: 404 Not Found (different client)
 ```
 
-### SQS Asynchronous Processing Flow
+### Message Queue Asynchronous Processing Flow
 ```mermaid
 sequenceDiagram
     participant P as Processing Service
-    participant Q as SQS Queue
+    participant SQ as SQS Queue
+    participant KQ as Kafka Topic
     participant A as API Server
     participant D as MongoDB
     participant U as UI/Client
     
-    Note over P,U: SQS Asynchronous Multitenant Workflow
+    Note over P,U: Message Queue Asynchronous Multitenant Workflow
     
-    P->>Q: Send Progress Message<br/>{"clientKrn": "krn:clnt:client1", "filename": "data.csv", ...}
-    Q->>A: SQS Consumer polls message
+    Note over P,KQ: Kafka Path
+    P->>KQ: Send Progress Message<br/>{"clientKrn": "krn:clnt:client1", "filename": "data.csv", ...}
+    KQ->>A: Kafka Consumer polls message
     A->>D: Store/Update progress data
-    A->>Q: Delete message (success)
+    A->>KQ: Commit offset (success)
     
-    P->>Q: Send Progress Update<br/>{"clientKrn": "krn:clnt:client1", "counts": {...}, ...}
-    Q->>A: SQS Consumer polls message
+    Note over P,SQ: SQS Path (Alternative)
+    P->>SQ: Send Progress Update<br/>{"clientKrn": "krn:clnt:client1", "counts": {...}, ...}
+    SQ->>A: SQS Consumer polls message
     A->>D: Update progress data
-    A->>Q: Delete message (success)
+    A->>SQ: Delete message (success)
     
-    P->>Q: Send Final Progress<br/>{"clientKrn": "krn:clnt:client1", "isLast": true, ...}
-    Q->>A: SQS Consumer polls message
+    P->>KQ: Send Final Progress<br/>{"clientKrn": "krn:clnt:client1", "isLast": true, ...}
+    KQ->>A: Kafka Consumer polls message
     A->>D: Mark progress completed
-    A->>Q: Delete message (success)
+    A->>KQ: Commit offset (success)
     
     Note over U,D: Meanwhile, UI can query progress
     U->>A: GET /progress/krn:clnt:client1?filename=data.csv
@@ -281,11 +287,13 @@ curl -X POST http://localhost:8081/progress/krn:clnt:company-a \
 
 ---
 
-## 📨 SQS Use Cases
+## 📨 Message Queue Use Cases
 
-### 1. CREATE New Progress via SQS Message
+### SQS Use Cases
 
-#### SQS Message Payload
+#### 1. CREATE New Progress via SQS Message
+
+**SQS Message Payload**
 ```json
 {
   "clientKrn": "krn:clnt:my-company",
@@ -310,9 +318,9 @@ curl -X POST http://localhost:8081/progress/krn:clnt:company-a \
 #### Processing Result (Same as HTTP API)
 The SQS consumer processes this message and creates the same progress data as the HTTP API would, with pattern consolidation applied to errors and warnings.
 
-### 2. UPDATE Progress via SQS Message
+#### 2. UPDATE Progress via SQS Message
 
-#### SQS Message Payload (Cumulative Updates)
+**SQS Message Payload (Cumulative Updates)**
 ```json
 {
   "clientKrn": "krn:clnt:my-company",
@@ -332,9 +340,9 @@ The SQS consumer processes this message and creates the same progress data as th
 
 **Note**: Counts are **cumulative additions** - the API will add these counts to existing totals, just like the HTTP API.
 
-### 3. COMPLETE Processing via SQS Message
+#### 3. COMPLETE Processing via SQS Message
 
-#### Final SQS Message
+**Final SQS Message**
 ```json
 {
   "clientKrn": "krn:clnt:my-company",
@@ -351,18 +359,86 @@ The SQS consumer processes this message and creates the same progress data as th
 
 This marks the processing as completed (`isCompleted: true` in the stored data).
 
-### 4. SQS vs HTTP API Comparison
+### Kafka Use Cases
 
-| Feature | HTTP API | SQS Messages |
-|---------|----------|--------------|
-| **Authentication** | JWT Required | Not Required |
-| **Response** | Immediate HTTP response | Fire-and-forget |
-| **Reliability** | Client must handle retries | Built-in SQS retry logic |
-| **Throughput** | Limited by HTTP connection pool | High throughput, async processing |
-| **Error Handling** | Immediate error response | Failed messages go to DLQ |
-| **Use Case** | Interactive UI updates | Batch processing, microservices |
+#### 1. CREATE New Progress via Kafka Message
 
-### 5. Multi-Service Architecture with SQS
+**Kafka Message Payload**
+```json
+{
+  "clientKrn": "krn:clnt:my-company",
+  "email": "processing-service@my-company.com",
+  "filename": "customer-data.csv",
+  "counts": {
+    "done": 100,
+    "warn": 5,
+    "failed": 2
+  },
+  "total": 1000,
+  "errors": [
+    {"line": 15, "message": "Invalid email format in customer record: john@invalid.com"},
+    {"line": 42, "message": "Missing required field: phone_number"}
+  ],
+  "warnings": [
+    {"line": 8, "message": "Deprecated field 'fax' still in use"}
+  ]
+}
+```
+
+**Processing Result**: Identical to HTTP API and SQS - same progress data with pattern consolidation.
+
+#### 2. UPDATE Progress via Kafka Message
+
+**Kafka Message Payload (Cumulative Updates)**
+```json
+{
+  "clientKrn": "krn:clnt:my-company",
+  "email": "processing-service@my-company.com", 
+  "filename": "customer-data.csv",
+  "counts": {
+    "done": 500,
+    "warn": 3,
+    "failed": 1
+  },
+  "errors": [
+    {"line": 234, "message": "Invalid email format in customer record: mary@invalid.domain"},
+    {"line": 456, "message": "Missing required field: address"}
+  ]
+}
+```
+
+#### 3. COMPLETE Processing via Kafka Message
+
+**Final Kafka Message**
+```json
+{
+  "clientKrn": "krn:clnt:my-company",
+  "email": "processing-service@my-company.com",
+  "filename": "customer-data.csv",
+  "counts": {
+    "done": 400,
+    "warn": 2,
+    "failed": 0
+  },
+  "isLast": true
+}
+```
+
+### 4. Message Queue Comparison
+
+| Feature | HTTP API | SQS Messages | Kafka Messages |
+|---------|----------|--------------|----------------|
+| **Authentication** | JWT Required | Not Required | Not Required |
+| **Response** | Immediate HTTP response | Fire-and-forget | Fire-and-forget |
+| **Reliability** | Client must handle retries | Built-in SQS retry logic | Built-in Kafka retry & persistence |
+| **Throughput** | Limited by HTTP connection pool | High throughput, async | Very high throughput, async |
+| **Ordering** | Not applicable | No ordering guarantee | Per-partition ordering |
+| **Persistence** | Not applicable | Up to 14 days | Configurable retention |
+| **Error Handling** | Immediate error response | Failed messages go to DLQ | Manual offset commits |
+| **Use Case** | Interactive UI updates | Serverless, cloud-native | High-volume, on-premises |
+| **Cost Model** | Server resources | Pay per message | Self-hosted infrastructure |
+
+### 5. Multi-Service Architecture with Dual Message Queue Support
 
 ```mermaid
 graph TB
@@ -370,15 +446,25 @@ graph TB
         PS1[Data Processor 1]
         PS2[ETL Service]
         PS3[Validation Service]
+        PS4[ML Pipeline]
     end
     
-    subgraph "AWS SQS"
-        Q[Progress Queue]
-        DLQ[Dead Letter Queue]
+    subgraph "Message Queues"
+        subgraph "AWS SQS"
+            Q[Progress Queue]
+            DLQ[Dead Letter Queue]
+        end
+        subgraph "Apache Kafka"
+            KT[Progress Topic]
+            KP1[Partition 0]
+            KP2[Partition 1]
+            KP3[Partition 2]
+        end
     end
     
     subgraph "Pebbles API"
         SC[SQS Consumer]
+        KC[Kafka Consumer]
         API[HTTP API]
         DB[(MongoDB)]
     end
@@ -390,8 +476,11 @@ graph TB
     
     PS1 --> Q
     PS2 --> Q
-    PS3 --> Q
+    PS3 --> KT
+    PS4 --> KT
     Q --> SC
+    KT --> KC
+    KC --> DB
     SC --> DB
     SC -.-> DLQ
     
@@ -406,4 +495,7 @@ graph TB
 **Benefits:**
 - **Decoupled Architecture**: Processing services don't need direct API access
 - **Fault Tolerance**: Failed messages are retried automatically
+- **Flexible Deployment**: Choose SQS for cloud-native or Kafka for high-throughput
 - **Scalability**: Handle thousands of progress updates without blocking
+- **Message Ordering**: Kafka provides per-partition ordering for sequential processing
+- **Dual Support**: Run both consumers simultaneously for hybrid architectures

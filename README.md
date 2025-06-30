@@ -1,6 +1,6 @@
 # Pebbles
 
-A multitenant file processing progress tracking service built with Clojure and MongoDB that provides real-time monitoring and secure update capabilities. Now with a modern React-based UI for visualizing progress data.
+A multitenant file processing progress tracking service built with Clojure and MongoDB that provides real-time monitoring and secure update capabilities. Features dual message queue support (SQS and Kafka) and a modern React-based UI for visualizing progress data.
 
 ## Overview
 
@@ -10,6 +10,11 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 - **Monitor processing** in real-time with detailed error/warning tracking
 - **Enforce authorization** - only file creators can update their files within the same tenant
 - **Lock completion** - once marked complete, no further updates allowed
+
+The service supports multiple message delivery channels:
+- **HTTP API**: Direct REST endpoints for interactive applications
+- **SQS Consumer**: AWS SQS message queue for serverless and cloud-native architectures
+- **Kafka Consumer**: Apache Kafka for high-throughput, on-premises, or multi-cloud deployments
 
 ## ✨ Key Features
 
@@ -34,6 +39,12 @@ Pebbles is a REST API service that tracks the progress of file processing operat
 - **Client-User-File Isolation**: Each client-user-file combination creates a unique progress record
 - **MongoDB Storage**: Persistent storage with optimized indexes for multitenant access
 - **Functional Design**: Immutable data structures and pure functions
+
+### Message Queue Integration
+- **Dual Consumer Support**: SQS and Kafka consumers can run simultaneously
+- **Identical Processing Logic**: Same validation, error handling, and business logic across all channels
+- **Flexible Deployment**: Choose the message queue that fits your infrastructure
+- **High Throughput**: Process thousands of progress updates asynchronously
 
 
 
@@ -74,6 +85,19 @@ open http://localhost:8081/api-docs
 ### Environment Variables
 - `MONGO_URI`: MongoDB connection string (default: `mongodb://localhost:27017/pebbles`)
 - `PORT`: Service port (default: `8081`)
+
+### Message Queue Configuration (Optional)
+Configure one or both message consumers:
+
+**SQS Consumer:**
+- `SQS_QUEUE_URL`: AWS SQS queue URL (enables SQS consumer when set)
+- `AWS_REGION`: AWS region (default: `us-east-1`)
+- `SQS_ENDPOINT`: SQS endpoint override for LocalStack testing
+
+**Kafka Consumer:**
+- `KAFKA_BOOTSTRAP_SERVERS`: Kafka bootstrap servers (enables Kafka consumer when set)
+- `KAFKA_TOPIC`: Topic name (default: `progress-updates`)
+- `KAFKA_GROUP_ID`: Consumer group ID (default: `pebbles-progress-consumer`)
 
 ## API Endpoints
 
@@ -383,6 +407,10 @@ See [use-cases.md](use-cases.md) for detailed examples including:
 **Environment Variables:**
 - `MONGO_URI`: MongoDB connection string (default: `mongodb://localhost:27017/pebbles`)
 - `PORT`: HTTP server port (default: `8081`)
+- `SQS_QUEUE_URL`: AWS SQS queue URL (optional, enables SQS consumer)
+- `KAFKA_BOOTSTRAP_SERVERS`: Kafka bootstrap servers (optional, enables Kafka consumer)
+- `KAFKA_TOPIC`: Kafka topic name (default: `progress-updates`)
+- `KAFKA_GROUP_ID`: Kafka consumer group (default: `pebbles-progress-consumer`)
 
 **Database:**
 - Collection: `progress`
@@ -500,7 +528,11 @@ pebbles/
 │       ├── openapi_handlers.clj # OpenAPI/Swagger endpoint handlers
 │       ├── spec_openapi.clj # Clojure spec to OpenAPI conversion
 │       ├── specs.clj     # Request/response validation (with clientKrn)
-│       └── system.clj    # Main system components and handlers
+│       ├── system.clj    # Main system components and handlers
+│       ├── sqs/
+│       │   └── consumer.clj # AWS SQS message consumer
+│       └── kafka/
+│           └── consumer.clj # Apache Kafka message consumer
 ├── test/
 │   └── pebbles/
 │       ├── db_test.clj
@@ -511,7 +543,15 @@ pebbles/
 │       ├── spec_openapi_test.clj
 │       ├── specs_test.clj
 │       ├── system_test.clj
-│       └── test_utils.clj
+│       ├── test_utils.clj
+│       ├── sqs/
+│       │   ├── consumer_test.clj
+│       │   ├── consumer_integration_test.clj
+│       │   └── sqs_test_utils.clj
+│       └── kafka/
+│           ├── consumer_test.clj
+│           ├── consumer_integration_test.clj
+│           └── kafka_test_utils.clj
 ├── pebbles-ui/           # React-based UI application
 │   ├── public/
 │   ├── src/
@@ -521,7 +561,9 @@ pebbles/
 │   ├── package.json
 │   └── README.md
 ├── examples/
-│   └── api-usage.md      # API usage examples with clientKrn
+│   ├── api-usage.md      # API usage examples with clientKrn
+│   ├── sqs-usage.md      # SQS consumer usage and examples
+│   └── kafka-usage.md    # Kafka consumer usage and examples
 ├── use-cases.md          # Detailed use cases and workflows for multitenancy
 ├── OPENAPI_INTEGRATION.md # OpenAPI/Swagger integration details
 └── resources/

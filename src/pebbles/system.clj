@@ -10,7 +10,8 @@
    [pebbles.interceptors :as interceptors]
    [pebbles.jwt :as jwt]
    [pebbles.openapi-handlers :as openapi-handlers]
-   [pebbles.sqs.consumer :as sqs-consumer]))
+   [pebbles.sqs.consumer :as sqs-consumer]
+   [pebbles.kafka.consumer :as kafka-consumer]))
 
 
 
@@ -92,7 +93,10 @@
 (defn system []
   (let [sqs-queue-url (System/getenv "SQS_QUEUE_URL")
         sqs-region (or (System/getenv "AWS_REGION") "us-east-1")
-        sqs-endpoint (System/getenv "SQS_ENDPOINT")]
+        sqs-endpoint (System/getenv "SQS_ENDPOINT")
+        kafka-bootstrap-servers (System/getenv "KAFKA_BOOTSTRAP_SERVERS")
+        kafka-topic (or (System/getenv "KAFKA_TOPIC") "progress-updates")
+        kafka-group-id (or (System/getenv "KAFKA_GROUP_ID") "pebbles-progress-consumer")]
     (cond-> (component/system-map
              :mongo (map->MongoComponent {:uri (or (System/getenv "MONGO_URI") "mongodb://localhost:27017/pebbles")})
              :http  (component/using
@@ -108,7 +112,15 @@
                                                (let [url (java.net.URL. sqs-endpoint)]
                                                  {:hostname (.getHost url)
                                                   :port (.getPort url)})))
-                           [:mongo])))))
+                           [:mongo]))
+      ;; Add Kafka consumer only if bootstrap servers are configured
+      kafka-bootstrap-servers (assoc :kafka-consumer
+                                    (component/using
+                                     (kafka-consumer/make-kafka-consumer
+                                      :bootstrap-servers kafka-bootstrap-servers
+                                      :topic kafka-topic
+                                      :group-id kafka-group-id)
+                                     [:mongo])))))
 
 (defn -main [& _]
   (component/start (system)))
