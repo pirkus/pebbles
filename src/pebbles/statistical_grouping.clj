@@ -16,7 +16,7 @@
    :percentage #"^\d+%$"
    :duration #"^\d+[smhd]$"
    :alphanumeric-id #"^[a-zA-Z0-9\-_]+$"
-   :email #"@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+   :email #"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+[a-zA-Z]"  ; More flexible email pattern
    :file-path #"^[/\\].*[/\\].*"
    :filename #"^[^/\\]+\.[a-zA-Z]{2,4}$"
    :parenthetical #"^\(.*:.*\)$"})
@@ -215,7 +215,11 @@
                            (fn [i tokens-at-pos]
                              (let [var-score (get variability i 0)]
                                (if (> var-score 0.5)
-                                 (normalize-token (first tokens-at-pos))
+                                 (let [normalized (normalize-token (first tokens-at-pos))]
+                                   ;; If variability is high but token wasn't normalized, use generic placeholder
+                                   (if (= normalized (first tokens-at-pos))
+                                     "{VARIABLE}"
+                                     normalized))
                                  (first tokens-at-pos))))
                            (apply map vector tokenized))))
         pattern (str/join " " pattern-tokens)
@@ -263,7 +267,10 @@
                         (or (= pt mt)
                             (and (str/starts-with? pt "{")
                                  (str/ends-with? pt "}")
-                                 (= pt (normalize-token mt)))))
+                                 (or (= pt (normalize-token mt))
+                                     ;; {VARIABLE} is a catch-all that matches any token that doesn't match specific patterns
+                                     (and (= pt "{VARIABLE}")
+                                          (= (normalize-token mt) mt))))))
                       pattern-tokens
                       message-tokens)))))
 

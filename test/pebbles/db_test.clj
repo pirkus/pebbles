@@ -107,24 +107,22 @@
           result (db/create-progress @test-db progress-data)]
       (is (contains? result :_id))
       (is (= "krn:clnt:test-client" (:clientKrn result)))
-      (is (= 2 (count (:errors result))))
+      ;; With improved statistical grouping, similar messages are grouped together
+      (is (= 1 (count (:errors result))))
       (is (= 1 (count (:warnings result))))
 
       ;; Verify errors and warnings were saved with pattern-based structure
       (let [saved (db/find-progress @test-db "krn:clnt:test-client" "errors.csv" "test@example.com")]
-        (is (= 2 (count (:errors saved))))
+        ;; With improved statistical grouping, similar messages are properly grouped together
+        (is (= 1 (count (:errors saved))))
         (is (= "Error {NUMBER}" (get-in saved [:errors 0 :pattern])))
-        ;; Check first error lines structure
-        (let [lines (get-in saved [:errors 0 :lines])]
-          (is (= 1 (count lines)))
-          (is (= 10 (get-in lines [0 :line])))
-          (is (= ["1"] (get-in lines [0 :values]))))
-        (is (= "Error {NUMBER}" (get-in saved [:errors 1 :pattern])))
-        ;; Check second error lines structure
-        (let [lines (get-in saved [:errors 1 :lines])]
-          (is (= 1 (count lines)))
-          (is (= 20 (get-in lines [0 :line])))
-          (is (= ["2"] (get-in lines [0 :values]))))
+        ;; Check that both error lines are grouped together
+        (let [lines (get-in saved [:errors 0 :lines])
+              line-numbers (map :line lines)
+              values (mapcat :values lines)]
+          (is (= 2 (count lines)))
+          (is (= [10 20] (sort line-numbers)))
+          (is (= #{"1" "2"} (set values))))
         (is (= 1 (count (:warnings saved))))
         (is (= "Warning {NUMBER}" (get-in saved [:warnings 0 :pattern])))
         ;; Check warning lines structure

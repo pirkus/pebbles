@@ -277,3 +277,227 @@
             (println (str "Matching tokens (1 vs 2): " matching-tokens "/" common-length))
             (println (str "Similarity score (1 vs 2): " similarity-1-2))
             (println (str "Similarity score (1 vs 3): " similarity-1-3))))))))
+
+(deftest invalid-email-format-errors-test
+  (testing "Groups invalid email format errors and extracts email values"
+    (let [messages [{:line 15 :message "Invalid email format: john.doe@invalid"}
+                    {:line 23 :message "Invalid email format: jane.smith@bad-domain"}
+                    {:line 31 :message "Invalid email format: user@incomplete"}]
+          grouped (sg/group-similar-messages messages)]
+      
+      ;; Should create one group for all email format errors
+      (is (= 1 (count grouped)))
+      
+      (let [email-group (first grouped)]
+        ;; Pattern should use {EMAIL} placeholder
+        (is (= "Invalid email format: {EMAIL}" (:pattern email-group)))
+        
+        ;; Should have all 3 lines
+        (is (= 3 (count (:lines email-group))))
+        
+        ;; Each line should have the email extracted as a value
+        (let [extracted-emails (set (mapcat :values (:lines email-group)))]
+          (is (= #{"john.doe@invalid" "jane.smith@bad-domain" "user@incomplete"} 
+                 extracted-emails)))
+        
+        ;; Verify line numbers are preserved
+        (let [line-numbers (set (map :line (:lines email-group)))]
+          (is (= #{15 23 31} line-numbers)))))))
+
+(deftest missing-required-field-errors-test
+  (testing "Groups missing field errors and extracts field names"
+    (let [messages [{:line 67 :message "Missing required field: customer_name"}
+                    {:line 89 :message "Missing required field: phone_number"}
+                    {:line 92 :message "Missing required field: billing_address"}]
+          grouped (sg/group-similar-messages messages)]
+      
+      ;; Should create one group for all missing field errors
+      (is (= 1 (count grouped)))
+      
+      (let [field-group (first grouped)]
+        ;; Pattern should use {VARIABLE} placeholder for field names
+        (is (= "Missing required field: {VARIABLE}" (:pattern field-group)))
+        
+        ;; Should have all 3 lines
+        (is (= 3 (count (:lines field-group))))
+        
+        ;; Each line should have the field name extracted as a value
+        (let [extracted-fields (set (mapcat :values (:lines field-group)))]
+          (is (= #{"customer_name" "phone_number" "billing_address"} 
+                 extracted-fields)))
+        
+        ;; Verify line numbers are preserved
+        (let [line-numbers (set (map :line (:lines field-group)))]
+          (is (= #{67 89 92} line-numbers)))))))
+
+(deftest deprecated-field-warnings-test
+  (testing "Groups deprecated field warnings using variability-based detection"
+    (let [messages [{:line 12 :message "Deprecated field found: fax"}
+                    {:line 45 :message "Deprecated field found: pager"}
+                    {:line 78 :message "Deprecated field found: telex"}]
+          grouped (sg/group-similar-messages messages)]
+      
+      ;; Should create one group for all deprecated field warnings
+      (is (= 1 (count grouped)))
+      
+      (let [deprecated-group (first grouped)]
+        ;; Pattern should use {VARIABLE} placeholder for simple field names
+        (is (= "Deprecated field found: {VARIABLE}" (:pattern deprecated-group)))
+        
+        ;; Should have all 3 lines
+        (is (= 3 (count (:lines deprecated-group))))
+        
+        ;; Each line should have the field name extracted as a value
+        (let [extracted-fields (set (mapcat :values (:lines deprecated-group)))]
+          (is (= #{"fax" "pager" "telex"} extracted-fields)))
+        
+        ;; Verify line numbers are preserved
+        (let [line-numbers (set (map :line (:lines deprecated-group)))]
+          (is (= #{12 45 78} line-numbers)))))))
+
+(deftest mixed-error-and-warning-patterns-test
+  (testing "Handles multiple different patterns in one batch"
+    (let [messages [{:line 15 :message "Invalid email format: john.doe@invalid"}
+                    {:line 23 :message "Invalid email format: jane.smith@bad-domain"}  
+                    {:line 67 :message "Missing required field: customer_name"}
+                    {:line 89 :message "Missing required field: phone_number"}
+                    {:line 12 :message "Deprecated field found: fax"}
+                    {:line 45 :message "Deprecated field found: pager"}]
+          grouped (sg/group-similar-messages messages)]
+      
+      ;; Should identify 3 distinct patterns
+      (is (= 3 (count grouped)))
+      
+      ;; Check email format group
+      (let [email-group (first (filter #(re-find #"Invalid email format" (:pattern %)) grouped))]
+        (is (not (nil? email-group)))
+        (is (= "Invalid email format: {EMAIL}" (:pattern email-group)))
+        (is (= 2 (count (:lines email-group))))
+        (let [emails (set (mapcat :values (:lines email-group)))]
+          (is (= #{"john.doe@invalid" "jane.smith@bad-domain"} emails))))
+      
+      ;; Check missing field group
+      (let [missing-group (first (filter #(re-find #"Missing required field" (:pattern %)) grouped))]
+        (is (not (nil? missing-group)))
+        (is (= "Missing required field: {VARIABLE}" (:pattern missing-group)))
+        (is (= 2 (count (:lines missing-group))))
+        (let [fields (set (mapcat :values (:lines missing-group)))]
+          (is (= #{"customer_name" "phone_number"} fields))))
+      
+      ;; Check deprecated field group
+      (let [deprecated-group (first (filter #(re-find #"Deprecated field found" (:pattern %)) grouped))]
+        (is (not (nil? deprecated-group)))
+        (is (= "Deprecated field found: {VARIABLE}" (:pattern deprecated-group)))
+        (is (= 2 (count (:lines deprecated-group))))
+        (let [fields (set (mapcat :values (:lines deprecated-group)))]
+          (is (= #{"fax" "pager"} fields)))))))
+
+(deftest simplified-field-detection-test
+  (testing "Simplified approach: field names detected by variability analysis, not regex patterns"
+    ;; Field names are no longer detected as variables by regex patterns
+    (is (not (sg/is-likely-variable? "customer_name")))
+    (is (not (sg/is-likely-variable? "customerName")))
+    (is (not (sg/is-likely-variable? "CustomerName")))
+    (is (not (sg/is-likely-variable? "customer-name")))
+    
+    ;; Field names are not normalized by specific patterns - they remain unchanged
+    (is (= "customer_name" (sg/normalize-token "customer_name")))
+    (is (= "customerName" (sg/normalize-token "customerName")))
+    (is (= "CustomerName" (sg/normalize-token "CustomerName")))
+    (is (= "customer-name" (sg/normalize-token "customer-name")))
+    
+    ;; Common English words are still not detected as variables
+    (is (not (sg/is-likely-variable? "Invalid")))
+    (is (not (sg/is-likely-variable? "email")))
+    (is (not (sg/is-likely-variable? "format")))
+    (is (not (sg/is-likely-variable? "field")))
+    (is (not (sg/is-likely-variable? "found")))
+    
+    ;; Simple words remain unchanged
+    (is (= "Invalid" (sg/normalize-token "Invalid")))
+    (is (= "email" (sg/normalize-token "email")))
+    (is (= "format" (sg/normalize-token "format")))
+    
+    ;; But variability analysis still correctly identifies field names
+    (let [field-messages [{:line 67 :message "Missing required field: customer_name"}
+                          {:line 89 :message "Missing required field: phone_number"}]
+          result (sg/group-similar-messages field-messages)
+          group (first result)]
+      (is (= 1 (count result)))
+      (is (= "Missing required field: {VARIABLE}" (:pattern group)))
+      (is (= ["customer_name" "phone_number"] (mapcat :values (:lines group)))))))
+
+(deftest enhanced-email-detection-test
+  (testing "Detects various email formats including invalid ones"
+    ;; Valid emails
+    (is (sg/is-likely-variable? "john@example.com"))
+    (is (sg/is-likely-variable? "user.name@domain.org"))
+    (is (= "{EMAIL}" (sg/normalize-token "john@example.com")))
+    
+    ;; Invalid emails (should still be detected as email patterns)
+    (is (sg/is-likely-variable? "john.doe@invalid"))
+    (is (sg/is-likely-variable? "user@incomplete"))
+    (is (sg/is-likely-variable? "jane.smith@bad-domain"))
+    (is (= "{EMAIL}" (sg/normalize-token "john.doe@invalid")))
+    (is (= "{EMAIL}" (sg/normalize-token "user@incomplete")))))
+
+(deftest variability-based-detection-test
+  (testing "Uses variability analysis for tokens that don't match specific patterns"
+    (let [messages [{:line 1 :message "Status changed to active"}
+                    {:line 2 :message "Status changed to inactive"}
+                    {:line 3 :message "Status changed to pending"}]
+          grouped (sg/group-similar-messages messages)]
+      
+      ;; Should create one group using variability detection
+      (is (= 1 (count grouped)))
+      
+      (let [status-group (first grouped)]
+        ;; Pattern should use {VARIABLE} for the status value  
+        (is (= "Status changed to {VARIABLE}" (:pattern status-group)))
+        
+        ;; Should extract all status values
+        (let [statuses (set (mapcat :values (:lines status-group)))]
+          (is (= #{"active" "inactive" "pending"} statuses))))))
+
+(deftest consolidate-with-existing-patterns-enhanced-test
+  (testing "Consolidates new messages with existing patterns using enhanced detection"
+    (let [existing-groups [{:pattern "Invalid email format: {EMAIL}"
+                           :lines [{:line 10 :values ["user@old.com"]}]}
+                          {:pattern "Missing required field: {VARIABLE}"
+                           :lines [{:line 20 :values ["old_field"]}]}
+                          {:pattern "Deprecated field found: {VARIABLE}"
+                           :lines [{:line 30 :values ["oldfield"]}]}]
+          
+          new-items [{:line 40 :message "Invalid email format: new.user@invalid"}
+                    {:line 50 :message "Missing required field: new_field_name"}
+                    {:line 60 :message "Deprecated field found: newfax"}
+                    {:line 70 :message "Completely new error type"}]
+          
+          result (sg/consolidate-with-existing-patterns new-items existing-groups)]
+      
+      ;; Should have 4 groups: 3 updated existing + 1 new
+      (is (= 4 (count result)))
+      
+      ;; Check email pattern was updated
+      (let [email-group (first (filter #(re-find #"Invalid email format" (:pattern %)) result))]
+        (is (= 2 (count (:lines email-group))))
+        (let [all-emails (set (mapcat :values (:lines email-group)))]
+          (is (= #{"user@old.com" "new.user@invalid"} all-emails))))
+      
+      ;; Check field pattern was updated  
+      (let [field-group (first (filter #(re-find #"Missing required field" (:pattern %)) result))]
+        (is (= 2 (count (:lines field-group))))
+        (let [all-fields (set (mapcat :values (:lines field-group)))]
+          (is (= #{"old_field" "new_field_name"} all-fields))))
+      
+      ;; Check deprecated pattern was updated
+      (let [deprecated-group (first (filter #(re-find #"Deprecated field found" (:pattern %)) result))]
+        (is (= 2 (count (:lines deprecated-group))))
+        (let [all-deprecated (set (mapcat :values (:lines deprecated-group)))]
+          (is (= #{"oldfield" "newfax"} all-deprecated))))
+      
+      ;; Check new pattern was created
+      (let [new-group (first (filter #(= "Completely new error type" (:pattern %)) result))]
+        (is (not (nil? new-group)))
+        (is (= 1 (count (:lines new-group))))
+        (is (= 70 (:line (first (:lines new-group))))))))))
