@@ -53,6 +53,9 @@
           restored-tokens (map #(restore-quoted-strings % quoted-strings) tokens)]
       (vec restored-tokens))))
 
+;; positions with high variability are more likely to be variables
+;; input is a list of tokenized messages: [[token1 token2 token5] [token1 token2 token6] [token1 token4 token7]]
+;; output is a list of variability scores for each position: [0.0 0.5 1.0]
 (defn calculate-token-variability
   "Calculate variability score for each token position"
   [tokenized-messages]
@@ -142,22 +145,33 @@
     :else token))
 
 (defn message-similarity
-  "Calculate similarity between two messages"
+  "Calculate similarity between two messages - length-tolerant for stack traces"
   [msg1 msg2]
   (let [tokens1 (tokenize-message msg1)
-        tokens2 (tokenize-message msg2)]
-    (if (not= (count tokens1) (count tokens2))
-      0.0
-      (let [matches (count (filter true? 
-                                  (map (fn [t1 t2]
-                                         (or (= t1 t2)
-                                             (and (is-likely-variable? t1)
-                                                  (is-likely-variable? t2))
-                                             ;; Also match if they normalize to same placeholder
-                                             (= (normalize-token t1) 
-                                                (normalize-token t2))))
-                                       tokens1 tokens2)))]
-        (double (/ matches (count tokens1)))))))
+        tokens2 (tokenize-message msg2)
+        len1 (count tokens1)
+        len2 (count tokens2)]
+    (if (and (zero? len1) (zero? len2))
+      1.0  ; Both empty
+      (if (or (zero? len1) (zero? len2))
+        0.0  ; One empty, one not
+        ;; Calculate similarity based on the overlapping portion
+        (let [common-len (min len1 len2)
+              max-len (max len1 len2)
+              ;; Count matches in the overlapping portion
+              matches (count (filter identity
+                                    (map (fn [t1 t2]
+                                           (or (= t1 t2)
+                                               (and (is-likely-variable? t1)
+                                                    (is-likely-variable? t2))
+                                               ;; Also match if they normalize to same placeholder
+                                               (= (normalize-token t1) 
+                                                  (normalize-token t2))))
+                                         (take common-len tokens1)
+                                         (take common-len tokens2))))]
+          ;; Return similarity as ratio of matches to longest string length
+          ;; This gives more realistic scores: 12 matches out of 14 tokens = 0.857
+          (double (/ matches max-len)))))))
 
 (defn find-similar-group
   "Find a group that contains a message similar to the given message"
@@ -232,17 +246,6 @@
   ([messages {:keys [threshold] :or {threshold 0.7}}]
    (let [groups (group-messages-by-similarity messages threshold)]
      (map extract-pattern-from-group groups))))
-
-(defn normalize-messages
-  "Normalize a set of messages by extracting patterns"
-  [messages]
-  (map (fn [msg]
-         (let [tokens (tokenize-message msg)
-               normalized-tokens (map normalize-token tokens)]
-           {:original msg
-            :pattern (str/join " " normalized-tokens)
-            :tokens tokens}))
-       messages))
 
 (defn consolidate-messages-with-patterns
   "Main entry point for message consolidation"
@@ -332,3 +335,4 @@
     (concat
      (merge-groups-with-existing existing-groups matched-groups)
      (or new-groups []))))
+

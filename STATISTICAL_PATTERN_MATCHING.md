@@ -2,7 +2,7 @@
 
 ## Overview
 
-Pebbles includes intelligent statistical pattern matching that automatically groups similar validation messages that differ only in their data values. This feature recognizes patterns in error and warning messages without requiring predefined rules.
+Pebbles includes intelligent statistical pattern matching that automatically groups similar validation messages, error logs, and stack traces that differ only in their data values. This feature recognizes patterns in messages without requiring predefined rules and is particularly effective for long structured text like exception stack traces.
 
 ## How It Works
 
@@ -15,7 +15,21 @@ The system automatically identifies variable data in messages:
 - Quoted strings: `'username'` → `{QUOTED}`
 - And more...
 
-### 2. Line-to-Value Mapping
+### 2. Length-Tolerant Similarity
+**NEW**: The system now handles messages with different token lengths intelligently:
+- Similar stack traces with different call depths are properly grouped
+- Similarity is calculated as `matches / longest_message_length` for realistic scores
+- Example: 12 matching tokens out of 14 total = 85.7% similarity (not 100%)
+
+### 3. Stack Trace Support
+Optimized for long structured text like Java stack traces:
+```java
+// These would be grouped together (85.7% similarity):
+java.lang.NullPointerException: Cannot invoke getData() at Service.processUser() at Controller.handleRequest()
+java.lang.NullPointerException: Cannot invoke getData() at Service.processUser() at Controller.handleRequest() at DispatcherServlet.doDispatch()
+```
+
+### 4. Line-to-Value Mapping
 Each consolidated group preserves the exact mapping between line numbers and extracted values:
 
 ```json
@@ -29,7 +43,7 @@ Each consolidated group preserves the exact mapping between line numbers and ext
 }
 ```
 
-### 3. Pattern-Aware Updates
+### 5. Pattern-Aware Updates
 When updating progress, the system:
 1. Loads existing patterns from the database
 2. Attempts to match new messages against existing patterns
