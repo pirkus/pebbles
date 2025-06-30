@@ -26,13 +26,7 @@
   "Start Kafka once for all integration tests in this namespace"
   [f]
   (println "DEBUG: Starting Kafka for integration tests...")
-  (let [kafka-env (kafka-utils/fresh-kafka)
-        ;; Add shutdown hook to force exit after integration tests
-        shutdown-hook (Thread. (fn []
-                                (println "DEBUG: Shutdown hook executing...")
-                                (Thread/sleep 2000)
-                                (println "DEBUG: Force exiting after integration tests...")
-                                (System/exit 0)))]
+  (let [kafka-env (kafka-utils/fresh-kafka)]
     (println "DEBUG: Kafka environment created...")
     (println "DEBUG: Creating shared admin client and producer...")
     (let [admin-client (kafka-utils/create-kafka-admin-client (:bootstrap-servers kafka-env))
@@ -42,8 +36,6 @@
                 *kafka-admin* admin-client
                 *kafka-producer* producer]
         (try
-          (println "DEBUG: About to run integration tests...")
-          (.addShutdownHook (Runtime/getRuntime) shutdown-hook)
           (f)
           (println "DEBUG: Integration tests completed successfully!")
           (finally
@@ -63,17 +55,7 @@
             (kafka-utils/cleanup-kafka kafka-env)
             ;; Force cleanup to ensure all resources are released
             (kafka-utils/force-cleanup)
-            (println "DEBUG: Kafka cleanup completed")
-            ;; Remove shutdown hook since we're cleaning up normally
-            (try
-              (.removeShutdownHook (Runtime/getRuntime) shutdown-hook)
-              (println "DEBUG: Removed shutdown hook")
-              (catch Exception e
-                (println "DEBUG: Could not remove shutdown hook (already executing?):" (.getMessage e))))
-            ;; Give a moment for cleanup, then force exit
-            (Thread/sleep 1000)
-            (println "DEBUG: Force exiting after successful cleanup...")
-            (System/exit 0)))))))
+            (println "DEBUG: Kafka cleanup completed")))))))
 
 (defn db-fixture [f]
   (let [db-map (test-utils/fresh-db)]
